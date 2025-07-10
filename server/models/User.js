@@ -46,6 +46,6 @@ UserSchema.pre('save', function (next) {
   next();
 });
 
-UserSchema.index({ email: 1 });
+
 
 module.exports = mongoose.model('User', UserSchema);
