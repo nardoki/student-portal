@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
@@ -24,10 +23,14 @@ const UserSchema = new Schema({
     enum: ['student', 'teacher'],
     required: true,
   },
-  groupIds: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Group',
-  }],
+  contactInfo: {
+    phone: { type: String, trim: true }, // e.g., "+251912345678"
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active',
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -46,5 +49,3 @@ UserSchema.pre('save', function (next) {
 UserSchema.index({ email: 1 });
 
 module.exports = mongoose.model('User', UserSchema);
-
-
