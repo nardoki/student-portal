@@ -6,7 +6,7 @@ const Teacher = require('../models/Teacher');
 
 const register = async (req, res) => {
   try {
-    const { fullName, email, password, role, contactInfo } = req.body;
+    const { fullName, email, password, role, contactInfo, expertise, qualification } = req.body;
 
     // Disallow admin registration
     if (role === 'admin') {
@@ -22,15 +22,15 @@ const register = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user (only students/teachers)
+    // Create user
     const user = await User.create({
       fullName,
       email,
       password: hashedPassword,
       role,
-      contactInfo,
+      contactInfo: contactInfo || { phone: '' },
       status: 'active',
-      approvalStatus: 'pending', // All non-admin users need approval
+      approvalStatus: 'pending',
     });
 
     // Create Student or Teacher record
@@ -45,6 +45,8 @@ const register = async (req, res) => {
       await Teacher.create({
         userId: user._id,
         teacherId: `TCH${Date.now()}${Math.floor(Math.random() * 1000)}`,
+        expertise: expertise || [],
+        qualification: qualification || '',
       });
     }
 
@@ -61,10 +63,13 @@ const login = async (req, res) => {
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'User not found' });
     }
 
-    // Check approval status (only for non-admins)
+    // Check status and approval
+    if (user.status === 'inactive') {
+      return res.status(403).json({ message: 'Account is deactivated' });
+    }
     if (user.role !== 'admin' && user.approvalStatus !== 'approved') {
       return res.status(403).json({ message: 'Account pending approval' });
     }
@@ -72,7 +77,7 @@ const login = async (req, res) => {
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Incorrect password' });
     }
 
     // Generate JWT
