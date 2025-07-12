@@ -5,7 +5,7 @@ const ClassSchema = new Schema({
   name: {
     type: String,
     required: true,
-    trim: true, // e.g "Robotics 101 Cohort A"
+    trim: true,
   },
   courseId: {
     type: Schema.Types.ObjectId,
@@ -43,10 +43,10 @@ const ClassSchema = new Schema({
     type: Date,
   },
   location: {
-    type: String, // e.g"Addis Ababa Lab" or "Virtual"
+    type: String,
   },
   meetingLink: {
-    type: String, // e.g Zoom link for virtual classes
+    type: String,
   },
   status: {
     type: String,

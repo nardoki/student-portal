@@ -9,12 +9,17 @@ const FileSchema = new Schema({
   },
   filePath: {
     type: String,
-    required: true, // e.g., "/uploads/123456-file.pdf"
+    required: true,
   },
   classId: {
     type: Schema.Types.ObjectId,
     ref: 'Class',
     required: true,
+  },
+  groupId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Group',
+    optional: true,
   },
   uploadedBy: {
     type: Schema.Types.ObjectId,
@@ -23,7 +28,7 @@ const FileSchema = new Schema({
   },
   contentType: {
     type: String,
-    required: true, // e.g., "application/pdf"
+    required: true,
   },
   size: {
     type: Number,
@@ -35,7 +40,7 @@ const FileSchema = new Schema({
   },
   category: {
     type: String,
-    enum: ['assignment', 'lecture-note', 'code', 'schematic', 'other'], // e.g., for robotics resources
+    enum: ['assignment', 'submission', 'lecture-note', 'code', 'schematic', 'other'],
   },
   createdAt: {
     type: Date,
@@ -43,6 +48,6 @@ const FileSchema = new Schema({
   },
 });
 
-FileSchema.index({ classId: 1, uploadedBy: 1, createdAt: -1 });
+FileSchema.index({ classId: 1, groupId: 1, uploadedBy: 1, createdAt: -1 });
 
 module.exports = mongoose.model('File', FileSchema);

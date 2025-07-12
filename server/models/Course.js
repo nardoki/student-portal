@@ -5,13 +5,13 @@ const CourseSchema = new Schema({
   name: {
     type: String,
     required: true,
-    trim: true, // e.g., "Embedded Systems"
+    trim: true,
   },
   code: {
     type: String,
     required: true,
     unique: true,
-    trim: true, // e.g., "ROB101"
+    trim: true,
   },
   description: {
     type: String,
@@ -19,10 +19,10 @@ const CourseSchema = new Schema({
   },
   type: {
     type: String,
-    enum: ['workshop', 'certification', 'full-program'], // e.g., workshop for short courses
+    enum: ['workshop', 'certification', 'full-program'],
   },
   prerequisites: [{
-    type: String, // e.g., ["ROB100", "CS101"]
+    type: String,
   }],
   createdAt: {
     type: Date,
@@ -30,6 +30,6 @@ const CourseSchema = new Schema({
   },
 });
 
-
+CourseSchema.index({ code: 1 });
 
 module.exports = mongoose.model('Course', CourseSchema);

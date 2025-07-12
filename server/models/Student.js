@@ -22,23 +22,27 @@ const StudentSchema = new Schema({
   },
   skillLevel: {
     type: String,
-    enum: ['beginner', 'intermediate', 'advanced'], //  for robotics skills
+    enum: ['beginner', 'intermediate', 'advanced'],
   },
   enrollmentDate: {
     type: Date,
   },
   projects: [{
-    projectId: { type: String }, // e.g. "PROJ1"
+    projectId: { type: String },
     title: { type: String },
     status: { type: String, enum: ['in-progress', 'completed'] },
   }],
   certifications: [{
-    name: { type: String }, // e.g. "ROS Basics"
+    name: { type: String },
     dateEarned: { type: Date },
   }],
   classIds: [{
     type: Schema.Types.ObjectId,
     ref: 'Class',
+  }],
+  groupIds: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Group',
   }],
   createdAt: {
     type: Date,

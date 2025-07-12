@@ -21,14 +21,14 @@ const TeacherSchema = new Schema({
     required: true,
   },
   expertise: [{
-    type: String, // e.g. ["Robotics", "Python", "Embedded Systems"]
+    type: String,
   }],
   qualification: {
-    type: String, // e.g. "MSc in Robotics"
+    type: String,
   },
   schedule: [{
     day: { type: String, enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
-    time: { type: String }, // e.g "10:00-12:00"
+    time: { type: String },
   }],
   classIds: [{
     type: Schema.Types.ObjectId,

@@ -20,16 +20,21 @@ const UserSchema = new Schema({
   },
   role: {
     type: String,
-    enum: ['student', 'teacher'],
+    enum: ['student', 'teacher', 'admin'],
     required: true,
   },
   contactInfo: {
-    phone: { type: String, trim: true }, // e.g., "+251912345678"
+    phone: { type: String, trim: true },
   },
   status: {
     type: String,
     enum: ['active', 'inactive'],
     default: 'active',
+  },
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved'],
+    default: 'pending',
   },
   createdAt: {
     type: Date,
