@@ -15,6 +15,7 @@ const {
   deleteClass,
   getCourses,
   getClasses,
+  createUser,
 } = require('../controllers/adminController');
 /*const {
   validateCreateCourse,
@@ -33,6 +34,7 @@ router.get('/users', getUsers);
 router.patch('/users/:userId/approve', approveUser);
 router.patch('/users/:userId/deactivate', /*validateDeactivateUser,*/ deactivateUser);
 router.post('/users/bulk-approve', /*validateBulkApprove, */approveUsersBulk);
+router.post('/users', /* validateCreateUser,*/ createUser);
 
 // Course Management
 router.post('/courses', /*validateCreateCourse,*/ createCourse);

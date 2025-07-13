@@ -5,7 +5,7 @@ const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-
+const bcrypt = require('bcrypt');
 
 // Middleware to verify admin role
 const authAdmin = (req, res, next) => {
@@ -24,6 +24,7 @@ const authAdmin = (req, res, next) => {
     res.status(401).json({ message: 'Invalid token' });
   }
 };
+
 
 // List all users with details
 const getUsers = async (req, res) => {
@@ -47,6 +48,7 @@ const getUsers = async (req, res) => {
   }
 };
 
+
 // Approve single user
 const approveUser = async (req, res) => {
   try {
@@ -68,6 +70,7 @@ const approveUser = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
 
 // Approve multiple users
 const approveUsersBulk = async (req, res) => {
@@ -782,6 +785,104 @@ const getClasses = async (req, res) => {
   }
 };
 
+// create user by admin 
+const createUser = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { fullName, email, password, role, contactInfo, expertise, qualification } = req.body;
+
+    // 1. Basic Validation - Keep it simple for now
+    if (!fullName || !email || !password || !role) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const validRoles = ['student', 'teacher', 'admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    // 2. Check for existing user
+    const existingUser = await User.findOne({ email }).session(session);
+    if (existingUser) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Email already exists' });
+    }
+
+    // 3. Hash password (basic security)
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 4. Create user
+    const user = await User.create([{
+      fullName,
+      email,
+      password: hashedPassword,
+      role,
+      contactInfo: contactInfo || { phone: '' },
+      status: 'active',
+      approvalStatus: 'approved' // Admin-created users are auto-approved
+    }], { session });
+
+    // 5. Create role-specific records (except for admin)
+    if (role === 'student') {
+      await Student.create([{
+        userId: user[0]._id,
+        studentId: `STU-${Date.now().toString().slice(-6)}`, // Simple temporary ID
+        skillLevel: 'beginner',
+        enrollmentDate: new Date()
+      }], { session });
+    } 
+    else if (role === 'teacher') {
+      await Teacher.create([{
+        userId: user[0]._id,
+        teacherId: `TCH-${Date.now().toString().slice(-6)}`, // Simple temporary ID
+        expertise: expertise || [],
+        qualification: qualification || 'Not specified'
+      }], { session });
+    }
+    // Admins don't need additional records
+
+    await session.commitTransaction();
+
+    // 6. Return safe user data (without password)
+    const userData = {
+      _id: user[0]._id,
+      fullName: user[0].fullName,
+      email: user[0].email,
+      role: user[0].role,
+      status: user[0].status
+    };
+
+    res.status(201).json({ 
+      success: true,
+      message: `${role} created successfully`,
+      user: userData
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    
+    console.error('User creation error:', error);
+    
+    // Basic error differentiation
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation failed',
+        error: error.message 
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'User creation failed',
+      error: error.message // Basic error for now
+    });
+  } finally {
+    session.endSession();
+  }
+};
 
 
 module.exports = {
@@ -799,4 +900,6 @@ module.exports = {
   deleteClass,
   getCourses,
   getClasses,
+  createUser,
 };
+

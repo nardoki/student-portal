@@ -7,13 +7,13 @@ const StudentSchema = new Schema({
     ref: 'User',
     required: true,
     unique: true,
-    validate: {
+   /*validate: {
       validator: async function (value) {
         const user = await mongoose.model('User').findById(value);
         return user && user.role === 'student';
       },
       message: 'UserId must reference a user with role "student"',
-    },
+    },*/
   },
   studentId: {
     type: String,

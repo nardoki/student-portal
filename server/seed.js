@@ -21,7 +21,7 @@ async function seedDB() {
    
 
     // Seed Teacher
-    let teacherUser = await User.findOne({ email: 'jane@example.com' });
+    let teacherUser = await User.findOne({ email: 'mo@example.com' });
     if (!teacherUser) {
       teacherUser = await User.create({
         fullName: 'mo ambaye',
@@ -54,7 +54,7 @@ if (!newStudentUser) {
   newStudentUser = await User.create({
     fullName: 'New Student',
     email: newStudentEmail,
-    password: 'hashed', // Replace with bcrypt.hash('password', 10) in production
+    password: 'hashed', 
     role: 'student',
     contactInfo: { phone: '+251912345679' },
     status: 'active',
