@@ -421,9 +421,14 @@ const deleteCourse = async (req, res) => {
       });
     }
 
-    // 3. Cascade delete operations
+    // 3. Cascade delete operations - CRITICAL CHANGE HERE
     await Promise.all([
-      Class.deleteMany({ courseId }).session(session),
+      // Disable validation when deleting classes
+      Class.deleteMany({ courseId })
+        .session(session)
+        .setOptions({ validateBeforeSave: false }),
+      
+      // Remove course from prerequisites
       Course.updateMany(
         { prerequisites: courseId },
         { $pull: { prerequisites: courseId } },
@@ -431,22 +436,24 @@ const deleteCourse = async (req, res) => {
       )
     ]);
 
-    // 4. Delete the course (with error handling)
+    // 4. Delete the course
     const deletionResult = await Course.deleteOne({ _id: courseId }).session(session);
     
     if (deletionResult.deletedCount === 0) {
-      throw new Error('Failed to delete course');
+      throw new Error('Failed to delete course (no documents deleted)');
     }
 
     await session.commitTransaction();
     
     res.json({ 
       success: true,
-      message: 'Course deleted successfully',
+      message: 'Course and all associated classes deleted successfully',
       data: {
-        deletedId: courseId,
-        code: course.code,
-        classesRemoved: deletionResult.deletedCount
+        deletedCourse: {
+          _id: course._id,
+          code: course.code
+        },
+        classesRemoved: await Class.countDocuments({ courseId }) // Verify cleanup
       }
     });
 
@@ -455,18 +462,15 @@ const deleteCourse = async (req, res) => {
     
     console.error('Course deletion error:', {
       error: error.message,
-      stack: error.stack,
       courseId: req.params.courseId,
-      timestamp: new Date()
+      timestamp: new Date().toISOString()
     });
 
     res.status(500).json({
       success: false,
-      error: process.env.NODE_ENV === 'development' 
-        ? error.message 
-        : 'Course deletion failed',
+      error: 'Course deletion failed',
       ...(process.env.NODE_ENV === 'development' && {
-        details: error.stack
+        details: error.message
       })
     });
   } finally {
