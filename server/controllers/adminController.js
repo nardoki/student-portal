@@ -398,59 +398,81 @@ const updateCourse = async (req, res) => {
 const deleteCourse = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const { courseId } = req.params;
 
     // 1. Validate course ID format
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
-      return res.status(400).json({ message: 'Invalid course ID format' });
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid course ID format' 
+      });
     }
 
-    // 2. Check if course exists
+    // 2. Find and validate course exists
     const course = await Course.findById(courseId).session(session);
     if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
+      await session.abortTransaction();
+      return res.status(404).json({ 
+        success: false,
+        error: 'Course not found' 
+      });
     }
 
-    // 3. Cascade delete (classes, references in other courses)
+    // 3. Cascade delete operations
     await Promise.all([
       Class.deleteMany({ courseId }).session(session),
       Course.updateMany(
         { prerequisites: courseId },
-        { $pull: { prerequisites: courseId } }
-      ).session(session)
+        { $pull: { prerequisites: courseId } },
+        { session }
+      )
     ]);
 
-    // 4. Delete the course
-    await Course.findByIdAndDelete(courseId).session(session);
+    // 4. Delete the course (with error handling)
+    const deletionResult = await Course.deleteOne({ _id: courseId }).session(session);
+    
+    if (deletionResult.deletedCount === 0) {
+      throw new Error('Failed to delete course');
+    }
 
     await session.commitTransaction();
     
     res.json({ 
-      message: 'Course and all associated data deleted successfully',
-      deletedCourse: {
-        _id: course._id,
-        code: course.code
+      success: true,
+      message: 'Course deleted successfully',
+      data: {
+        deletedId: courseId,
+        code: course.code,
+        classesRemoved: deletionResult.deletedCount
       }
     });
 
   } catch (error) {
     await session.abortTransaction();
     
-    if (error.name === 'CastError') {
-      return res.status(400).json({ message: 'Invalid course ID format' });
-    }
+    console.error('Course deletion error:', {
+      error: error.message,
+      stack: error.stack,
+      courseId: req.params.courseId,
+      timestamp: new Date()
+    });
+
     res.status(500).json({
-      message: 'Failed to delete course',
-      error: process.env.NODE_ENV === 'development' ? error.message : null
+      success: false,
+      error: process.env.NODE_ENV === 'development' 
+        ? error.message 
+        : 'Course deletion failed',
+      ...(process.env.NODE_ENV === 'development' && {
+        details: error.stack
+      })
     });
   } finally {
     session.endSession();
   }
 };
-
-
 
 
 // Get course details
