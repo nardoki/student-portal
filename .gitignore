@@ -4,3 +4,6 @@ node_modules/
 server/.env
 server/node_modules/
 uploads/
+
+package-lock.json/
+package.json/
