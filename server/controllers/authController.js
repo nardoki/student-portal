@@ -1,84 +1,178 @@
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Student = require('../models/Student');
-const Teacher = require('../models/Teacher');
+const User = require('../models/userSchema');
 
-const register = async (req, res) => {
+
+
+// Student self-registration (public)
+const registerStudent = async (req, res, next) => {
   try {
-    const { fullName, email, password, role, contactInfo, expertise, qualification } = req.body;
+    const { name, email, password } = req.body;
 
-    // Disallow admin registration
-    if (role === 'admin') {
-      return res.status(403).json({ message: 'Admin registration is not allowed' });
+
+
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
-    // Check if user exists
+
+
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'Email already exists' });
+      return res.status(400).json({ error: 'Email already registered' });
     }
+
+
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
 
-    // Create user
-    const user = await User.create({
-      fullName,
+
+
+    // Create new student with pending approval
+    const user = new User({
+      name,
       email,
-      password: hashedPassword,
-      role,
-      contactInfo: contactInfo || { phone: '' },
+      password_hash,
+      role: 'student',
       status: 'active',
-      approvalStatus: 'pending',
+      approvalStatus: 'pending' // Requires admin approval
     });
 
-    // Create Student or Teacher record
-    if (role === 'student') {
-      await Student.create({
-        userId: user._id,
-        studentId: `STU${Date.now()}${Math.floor(Math.random() * 1000)}`,
-        skillLevel: 'beginner',
-        enrollmentDate: new Date(),
-      });
-    } else if (role === 'teacher') {
-      await Teacher.create({
-        userId: user._id,
-        teacherId: `TCH${Date.now()}${Math.floor(Math.random() * 1000)}`,
-        expertise: expertise || [],
-        qualification: qualification || '',
-      });
-    }
+    await user.save();
 
-    res.status(201).json({ message: 'User registered, awaiting approval' });
+    res.status(201).json({
+      message: 'Registration pending approval',
+      userId: user._id
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    next(error);
   }
 };
 
-const login = async (req, res) => {
+
+
+
+// Admin/teacher user creation (protected)
+const createUser = async (req, res, next) => {
+  try {
+    const { name, email, password, role } = req.body;
+    const creator = req.user;
+
+
+
+
+
+    // Validate input
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ error: 'Name, email, password, and role are required' });
+    }
+    if (!['student', 'teacher', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be student, teacher, or admin' });
+    }
+
+
+
+
+    // Prevent creating admins unless creator is an admin
+    if (role === 'admin' && creator.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admins can create other admins' });
+    }
+
+
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+
+
+    // Create user
+    const user = new User({
+      name,
+      email,
+      password_hash,
+      role,
+      status: 'active',
+      approvalStatus: 'approved', // Auto-approved for admin/teacher-created users
+      createdBy: creator._id
+    });
+
+    await user.save();
+
+    res.status(201).json({
+      id: user._id,
+      name,
+      email,
+      role,
+      status: user.status,
+      approvalStatus: user.approvalStatus
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+
+// Login for all roles
+const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
+
+
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+
+
+
+    // Find user and explicitly include password_hash
+    const user = await User.findOne({ email }).select('+password_hash');
+    
     if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check status and approval
-    if (user.status === 'inactive') {
-      return res.status(403).json({ message: 'Account is deactivated' });
-    }
-    if (user.role !== 'admin' && user.approvalStatus !== 'approved') {
-      return res.status(403).json({ message: 'Account pending approval' });
+
+
+
+    // Check approval status
+    if (user.approvalStatus !== 'approved') {
+      return res.status(403).json({ error: 'Account pending approval' });
     }
 
-    // Verify password
-    const isMatch = await bcrypt.compare(password, user.password);
+
+
+    // Check status
+    if (user.status !== 'active') {
+      return res.status(403).json({ error: 'Account is inactive' });
+    }
+
+
+
+    // Verify password - using password_hash instead of password
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Incorrect password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+
 
     // Generate JWT
     const token = jwt.sign(
@@ -87,10 +181,46 @@ const login = async (req, res) => {
       { expiresIn: '1d' }
     );
 
-    res.json({ token, role: user.role });
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        approvalStatus: user.approvalStatus
+      }
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Login error:', error);
+    next(error);
   }
 };
 
-module.exports = { register, login };
+
+
+
+// Get current user (protected)
+const getCurrentUser = async (req, res, next) => {
+  try {
+    res.json({
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      status: req.user.status,
+      approvalStatus: req.user.approvalStatus
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  registerStudent,
+  createUser,
+  login,
+  getCurrentUser
+};

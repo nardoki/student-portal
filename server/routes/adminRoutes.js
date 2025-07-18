@@ -1,52 +1,30 @@
 const express = require('express');
 const router = express.Router();
-const {
-  authAdmin,
-  getUsers,
-  approveUser,
-  approveUsersBulk,
-  deactivateUser,
-  createCourse,
-  updateCourse,
-  deleteCourse,
-  getCourseDetails,
-  createClass,
-  updateClass,
-  deleteClass,
-  getCourses,
-  getClasses,
-  createUser,
-} = require('../controllers/adminController');
-/*const {
-  validateCreateCourse,
-  validateUpdateCourse,
-  validateCreateClass,
-  validateUpdateClass,
-  validateBulkApprove,
-  validateDeactivateUser,
-} = require('../middleware/validateAdmin');*/
+const { authMiddleware, restrictTo, restrictDelete } = require('../middleware/auth');
+const adminController = require('../controllers/adminController');
 
-// Apply admin middleware globally
-router.use(authAdmin);
 
-// User Management
-router.get('/users', getUsers);
-router.patch('/users/:userId/approve', approveUser);
-router.patch('/users/:userId/deactivate', /*validateDeactivateUser,*/ deactivateUser);
-router.post('/users/bulk-approve', /*validateBulkApprove, */approveUsersBulk);
-router.post('/users', /* validateCreateUser,*/ createUser);
 
-// Course Management
-router.post('/courses', /*validateCreateCourse,*/ createCourse);
-router.patch('/courses/:courseId', /*validateUpdateCourse,*/ updateCourse);
-router.delete('/courses/:courseId', deleteCourse);
-router.get('/courses', getCourses);
-router.get('/courses/:courseId', getCourseDetails);
 
-// Class Management
-router.post('/classes', /*validateCreateClass,*/ createClass);
-router.patch('/classes/:classId', /*validateUpdateClass,*/ updateClass);
-router.delete('/classes/:classId', deleteClass);
-router.get('/classes', getClasses);
+// Get all users (admin or teacher)
+router.get('/users', authMiddleware, restrictTo('admin', 'teacher'), adminController.getAllUsers);
+
+// Create user (admin or teacher)
+router.post('/users', authMiddleware, restrictTo('admin', 'teacher'), adminController.createUser);
+
+// Approve pending student registration (adminand teacher)
+router.patch('/users/:id/approve', authMiddleware, restrictTo('admin','teacher'), adminController.approveUser);
+
+// Update user status (admin or teacher)
+router.patch('/users/:id/status', authMiddleware, restrictTo('admin', 'teacher'), adminController.updateUserStatus);
+
+// Delete user (admin or teacher, with restrictions)
+router.delete('/users/:id', authMiddleware, restrictTo('admin', 'teacher'), restrictDelete, adminController.deleteUser);
+
+// Create group (admin or teacher)
+router.post('/groups', authMiddleware, restrictTo('admin', 'teacher'), adminController.createGroup);
+
+// Delete group (admin or primary creator)
+router.delete('/groups/:groupId', authMiddleware, restrictTo('admin', 'teacher'), restrictDelete, adminController.deleteGroup);
 
 module.exports = router;

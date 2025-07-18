@@ -7,8 +7,12 @@ const compression = require('compression');
 const multer = require('multer');
 const path = require('path');
 const connectDB = require('./config/db');
+const errorMiddleware = require('./middleware/error');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const fileRoutes = require('./routes/fileRoutes');
+const groupRoutes = require('./routes/groupRoutes');
+
 
 dotenv.config();
 const app = express();
@@ -48,13 +52,17 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
-
+app.use(errorMiddleware);
 // Connect to MongoDB
 connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/files', fileRoutes);
+app.use('/api/groups', groupRoutes);
+
+
 
 
 // Basic route

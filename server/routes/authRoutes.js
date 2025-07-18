@@ -1,9 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { register, login } = require('../controllers/authController');
-/* const { validateRegister, validateLogin } = require('../middleware/validate');*/
+const { authMiddleware, restrictTo } = require('../middleware/auth');
+const authController = require('../controllers/authController');
 
-router.post('/register',/* validateRegister,*/ register);
-router.post('/login', /*validateLogin,*/ login);
+// Student registration (public)
+router.post('/register', authController.registerStudent);
+
+// Admin/teacher user creation (protected)
+router.post('/create-user', authMiddleware, restrictTo('admin', 'teacher'), authController.createUser);
+
+// Login (public)
+router.post('/login', authController.login);
+
+// Get current user (protected)
+router.get('/me', authMiddleware, authController.getCurrentUser);
 
 module.exports = router;
