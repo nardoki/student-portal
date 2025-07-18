@@ -5,13 +5,15 @@ const DiscussionReply = require('../models/discussionReplySchema');
 
 const uploadFile = async (req, res, next) => {
   try {
-    if (!req.file) {
+    if (!req.files) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const { group_id } = req.body; // Optional for discussion attachments
+    const { group_id } = req.body; 
 
-    // If group_id is provided, verify user is a group member or creator
+    
+
+
     if (group_id) {
       const membership = await GroupMembership.findOne({
         user_id: req.user._id,
@@ -20,11 +22,15 @@ const uploadFile = async (req, res, next) => {
       if (!membership) {
         return res.status(403).json({ error: 'Not a member of this group' });
       }
+
+
       // Teachers/admins can upload to groups
       if (req.user.role !== 'admin' && membership.role_in_group !== 'creator') {
         return res.status(403).json({ error: 'Only teachers or admins can upload to groups' });
       }
     }
+
+
 
     // Create file record
     const file = new File({
@@ -56,7 +62,9 @@ const downloadFile = async (req, res, next) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Check access: group members or discussion participants
+
+
+    // Check accessgroup members or discussion participants
     let hasAccess = false;
 
     if (file.group_id) {
@@ -68,7 +76,8 @@ const downloadFile = async (req, res, next) => {
         hasAccess = true;
       }
     } else {
-      // Check if file is attached to a discussion post or reply
+
+      
       const post = await DiscussionPost.findOne({ attachments: file._id });
       const reply = await DiscussionReply.findOne({ attachments: file._id });
 
@@ -96,7 +105,8 @@ const downloadFile = async (req, res, next) => {
       return res.status(403).json({ error: 'Access denied: not authorized to download this file' });
     }
 
-    // Serve the file (assumes local storage we can update for cloud storage)
+    
+    // Serve the file (for now  local storage we can update for cloud storage)
     res.download(file.path, file.name, (err) => {
       if (err) {
         next(err);

@@ -10,12 +10,12 @@ const fileSchema = new Schema({
   },
   path: {
     type: String,
-    required: true // Path to file in cloud storage (e.g., S3 URL)
+    required: true 
   },
   type: {
     type: String,
     trim: true,
-    maxlength: 20 // e.g., 'pdf', 'docx', 'jpg'
+    maxlength: 20 
   },
   uploaded_by: {
     type: Schema.Types.ObjectId,
@@ -25,7 +25,7 @@ const fileSchema = new Schema({
   group_id: {
     type: Schema.Types.ObjectId,
     ref: 'Group',
-    default: null // Nullable for discussion attachments
+    default: null 
   },
   uploaded_at: {
     type: Date,

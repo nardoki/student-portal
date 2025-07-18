@@ -12,34 +12,12 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const groupRoutes = require('./routes/groupRoutes');
+const announcementRoutes = require('./routes/announcementRoutes');
 
 
 dotenv.config();
 const app = express();
 
-// Multer storage configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'text/plain'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG, PDF, and TXT allowed.'));
-    }
-  }
-});
 
 // Middleware
 app.use(helmet());
@@ -61,7 +39,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/groups', groupRoutes);
-
+app.use('/api/announcements', announcementRoutes);
 
 
 

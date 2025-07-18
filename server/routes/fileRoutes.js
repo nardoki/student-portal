@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const uploadMiddleware = require('../middleware/upload');
+const { upload } = require('../middleware/upload');
 const { authMiddleware, restrictToGroupCreatorOrAdmin } = require('../middleware/auth');
 const fileController = require('../controllers/fileController');
 
+
 // Upload file (teachers/admins to groups, users to discussions)
-router.post('/', authMiddleware, uploadMiddleware, fileController.uploadFile);
+router.post('/', authMiddleware, upload.array('attachments', 5), fileController.uploadFile);
+
 
 // Download file (group members only)
 router.get('/:id', authMiddleware, fileController.downloadFile);
