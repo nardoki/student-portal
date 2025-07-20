@@ -1,117 +1,116 @@
 const File = require('../models/fileSchema');
+const Group = require('../models/groupSchema');
 const GroupMembership = require('../models/groupMembershipSchema');
-const DiscussionPost = require('../models/discussionPostSchema');
-const DiscussionReply = require('../models/discussionReplySchema');
+const path = require('path');
+const fs = require('fs');
 
+// Upload file to a group (admin or group creator)
 const uploadFile = async (req, res, next) => {
   try {
-    if (!req.files) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    const { group_id } = req.body;
+    const files = req.files || [];
+
+    // Validate input
+    if (!group_id) {
+      return res.status(400).json({ error: 'Group ID is required' });
+    }
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'At least one file is required' });
     }
 
-    const { group_id } = req.body; 
+    const group = await Group.findById(group_id);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
 
-    
+    // Teachers can only upload to groups they created or are creators of
+    if (req.user.role === 'teacher' && 
+        !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
+        group.created_by.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Teachers can only upload files to groups they created or are assigned as creators' });
+    }
 
-
-    if (group_id) {
-      const membership = await GroupMembership.findOne({
-        user_id: req.user._id,
+    // Save file metadata
+    const savedFiles = [];
+    for (const file of files) {
+      const fileDoc = new File({
+        filename: file.filename,
+        path: file.path,
+        size: file.size,
+        uploaded_by: req.user._id,
         group_id
       });
-      if (!membership) {
-        return res.status(403).json({ error: 'Not a member of this group' });
-      }
-
-
-      // Teachers/admins can upload to groups
-      if (req.user.role !== 'admin' && membership.role_in_group !== 'creator') {
-        return res.status(403).json({ error: 'Only teachers or admins can upload to groups' });
-      }
+      await fileDoc.save();
+      savedFiles.push({
+        id: fileDoc._id,
+        filename: fileDoc.filename,
+        size: fileDoc.size,
+        uploaded_by: fileDoc.uploaded_by,
+        group_id: fileDoc.group_id,
+        created_at: fileDoc.created_at
+      });
     }
 
-
-
-    // Create file record
-    const file = new File({
-      name: req.file.originalname,
-      path: `/uploads/${req.file.filename}`,
-      type: req.file.mimetype,
-      uploaded_by: req.user._id,
-      group_id: group_id || null
-    });
-
-    await file.save();
-
-    res.status(201).json({
-      id: file._id,
-      name: file.name,
-      path: file.path,
-      type: file.type,
-      uploaded_at: file.uploaded_at
-    });
+    res.status(201).json({ message: 'Files uploaded successfully', files: savedFiles });
   } catch (error) {
     next(error);
   }
 };
 
+// Download file (admin or group member)
 const downloadFile = async (req, res, next) => {
   try {
-    const file = await File.findById(req.params.id);
+    const { fileId } = req.params;
+
+    const file = await File.findById(fileId);
     if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-
-
-    // Check accessgroup members or discussion participants
-    let hasAccess = false;
-
-    if (file.group_id) {
-      const membership = await GroupMembership.findOne({
-        user_id: req.user._id,
-        group_id: file.group_id
-      });
-      if (membership) {
-        hasAccess = true;
-      }
-    } else {
-
-      
-      const post = await DiscussionPost.findOne({ attachments: file._id });
-      const reply = await DiscussionReply.findOne({ attachments: file._id });
-
-      if (post) {
-        const membership = await GroupMembership.findOne({
-          user_id: req.user._id,
-          group_id: post.group_id
-        });
-        if (membership) {
-          hasAccess = true;
-        }
-      } else if (reply) {
-        const parentPost = await DiscussionPost.findById(reply.post_id);
-        const membership = await GroupMembership.findOne({
-          user_id: req.user._id,
-          group_id: parentPost.group_id
-        });
-        if (membership) {
-          hasAccess = true;
-        }
+    // Check if user is a group member or admin
+    if (req.user.role !== 'admin') {
+      const membership = await GroupMembership.findOne({ group_id: file.group_id, user_id: req.user._id });
+      if (!membership) {
+        return res.status(403).json({ error: 'Access denied: not a group member' });
       }
     }
 
-    if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied: not authorized to download this file' });
+    const filePath = path.resolve(file.path);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found on server' });
     }
 
-    
-    // Serve the file (for now  local storage we can update for cloud storage)
-    res.download(file.path, file.name, (err) => {
-      if (err) {
-        next(err);
-      }
-    });
+    res.download(filePath, file.filename);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete file (admin or file uploader)
+const deleteFile = async (req, res, next) => {
+  try {
+    const { fileId } = req.params;
+
+    const file = await File.findById(fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Teachers can only delete files they uploaded
+    if (req.user.role === 'teacher' && file.uploaded_by.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ error: 'Teachers can only delete files they uploaded' });
+    }
+
+    // Delete file from disk
+    const filePath = path.resolve(file.path);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Delete file metadata
+    await File.findByIdAndDelete(fileId);
+
+    res.json({ message: 'File deleted successfully' });
   } catch (error) {
     next(error);
   }
@@ -119,5 +118,6 @@ const downloadFile = async (req, res, next) => {
 
 module.exports = {
   uploadFile,
-  downloadFile
+  downloadFile,
+  deleteFile
 };

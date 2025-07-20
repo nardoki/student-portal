@@ -2,20 +2,19 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const fileSchema = new Schema({
-  name: {
+  filename: {
     type: String,
     required: true,
-    trim: true,
-    maxlength: 255
+    trim: true
   },
   path: {
     type: String,
-    required: true 
+    required: true,
+    trim: true
   },
-  type: {
-    type: String,
-    trim: true,
-    maxlength: 20 
+  size: {
+    type: Number,
+    required: true
   },
   uploaded_by: {
     type: Schema.Types.ObjectId,
@@ -25,16 +24,12 @@ const fileSchema = new Schema({
   group_id: {
     type: Schema.Types.ObjectId,
     ref: 'Group',
-    default: null 
+    required: true
   },
-  uploaded_at: {
+  created_at: {
     type: Date,
     default: Date.now
   }
-}, {
-  timestamps: false
 });
-
-fileSchema.index({ group_id: 1 });
 
 module.exports = mongoose.model('File', fileSchema);
