@@ -15,6 +15,7 @@ const logger = winston.createLogger({
 
 // Error handling middleware
 const errorMiddleware = (err, req, res, next) => {
+  
   // Log the error
   logger.error({
     message: err.message,

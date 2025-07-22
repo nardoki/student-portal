@@ -4,11 +4,15 @@ const GroupMembership = require('../models/groupMembershipSchema');
 const path = require('path');
 const fs = require('fs');
 
+
+
+
 // Upload file to a group (admin or group creator)
 const uploadFile = async (req, res, next) => {
   try {
     const { group_id } = req.body;
     const files = req.files || [];
+
 
     // Validate input
     if (!group_id) {
@@ -23,12 +27,15 @@ const uploadFile = async (req, res, next) => {
       return res.status(404).json({ error: 'Group not found' });
     }
 
+
+
     // Teachers can only upload to groups they created or are creators of
     if (req.user.role === 'teacher' && 
         !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
         group.created_by.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Teachers can only upload files to groups they created or are assigned as creators' });
     }
+
 
     // Save file metadata
     const savedFiles = [];
@@ -57,6 +64,53 @@ const uploadFile = async (req, res, next) => {
   }
 };
 
+
+
+
+// list files
+const listFiles = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+
+    if (req.user.role !== 'admin') {
+      const membership = await GroupMembership.findOne({ group_id: groupId, user_id: req.user._id });
+      if (!membership) {
+        return res.status(403).json({ error: 'Access denied: not a group member' });
+      }
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const files = await File.find({ group_id: groupId })
+      .populate('uploaded_by', 'name email')
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await File.countDocuments({ group_id: groupId });
+
+    res.json({
+      files,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+
 // Download file (admin or group member)
 const downloadFile = async (req, res, next) => {
   try {
@@ -66,6 +120,7 @@ const downloadFile = async (req, res, next) => {
     if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
+
 
     // Check if user is a group member or admin
     if (req.user.role !== 'admin') {
@@ -86,6 +141,8 @@ const downloadFile = async (req, res, next) => {
   }
 };
 
+
+
 // Delete file (admin or file uploader)
 const deleteFile = async (req, res, next) => {
   try {
@@ -96,10 +153,12 @@ const deleteFile = async (req, res, next) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
+
     // Teachers can only delete files they uploaded
     if (req.user.role === 'teacher' && file.uploaded_by.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Teachers can only delete files they uploaded' });
     }
+
 
     // Delete file from disk
     const filePath = path.resolve(file.path);
@@ -107,6 +166,7 @@ const deleteFile = async (req, res, next) => {
       fs.unlinkSync(filePath);
     }
 
+    
     // Delete file metadata
     await File.findByIdAndDelete(fileId);
 
@@ -118,6 +178,7 @@ const deleteFile = async (req, res, next) => {
 
 module.exports = {
   uploadFile,
+  listFiles,
   downloadFile,
   deleteFile
 };

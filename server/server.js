@@ -13,10 +13,18 @@ const adminRoutes = require('./routes/adminRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
+const discussionRoutes = require('./routes/discussionRoutes');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
+const swaggerDocument = YAML.load('swagger.yaml');
+
+
 
 
 dotenv.config();
 const app = express();
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 
 // Middleware
@@ -42,7 +50,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/announcements', announcementRoutes);
-
+app.use('/api/discussions', discussionRoutes);
 
 
 // Basic route

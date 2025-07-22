@@ -39,7 +39,7 @@ const registerStudent = async (req, res, next) => {
       password_hash,
       role: 'student',
       status: 'active',
-      approvalStatus: 'pending' // Requires admin approval
+      approvalStatus: 'pending' 
     });
 
     await user.save();
@@ -104,7 +104,7 @@ const createUser = async (req, res, next) => {
       password_hash,
       role,
       status: 'active',
-      approvalStatus: 'approved', // Auto-approved for admin/teacher-created users
+      approvalStatus: 'approved', // Auto-approved for admin/teacher-created userr
       createdBy: creator._id
     });
 
@@ -166,7 +166,7 @@ const login = async (req, res, next) => {
 
 
 
-    // Verify password - using password_hash instead of password
+    // Verify password  using password_hash 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });

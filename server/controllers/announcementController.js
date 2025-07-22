@@ -1,42 +1,50 @@
-
 const Announcement = require('../models/announcementSchema');
 const Group = require('../models/groupSchema');
 const GroupMembership = require('../models/groupMembershipSchema');
 const File = require('../models/fileSchema');
+const DiscussionPost = require('../models/discussionPostSchema');
+const DiscussionReply = require('../models/discussionReplySchema');
+const fs = require('fs');
+const { ObjectId } = require('mongoose').Types;
 
 
 
 // Create announcement (admin or group creator)
 const createAnnouncement = async (req, res, next) => {
   try {
-    const { title, content, group_id, priority, pinned } = req.body;
+    const { groupId } = req.params;
+    const { title, content, priority, pinned } = req.body;
     const files = req.files || [];
 
 
-
     // Validate input
-    if (!title || !content || !group_id) {
+    if (!title || !content || !groupId) {
       return res.status(400).json({ error: 'Title, content, and group ID are required' });
+    }
+    if (!ObjectId.isValid(groupId)) {
+      return res.status(400).json({ error: 'Invalid group ID' });
     }
     if (priority && !['low', 'medium', 'high'].includes(priority)) {
       return res.status(400).json({ error: 'Priority must be low, medium, or high' });
     }
+    if (pinned !== undefined && typeof pinned !== 'boolean') {
+      return res.status(400).json({ error: 'Pinned must be a boolean' });
+    }
 
-    const group = await Group.findById(group_id);
+    const group = await Group.findById(groupId);
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
 
 
-
-    // Teaches can only create announcements for groups they created or are creators of
-    if (req.user.role === 'teacher' && 
-        !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-        group.created_by.toString() !== req.user._id.toString()) {
+    // Teachers can only create announcements for groups they created or are creators of
+    if (
+      req.user.role === 'teacher' &&
+      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
+      group.created_by.toString() !== req.user._id.toString()
+    ) {
       return res.status(403).json({ error: 'Teachers can only create announcements for groups they created or are assigned as creators' });
     }
-
-
 
 
     // Save file metadata if attachments exist
@@ -47,7 +55,7 @@ const createAnnouncement = async (req, res, next) => {
         path: file.path,
         size: file.size,
         uploaded_by: req.user._id,
-        group_id
+        group_id: groupId
       });
       await fileDoc.save();
       attachmentIds.push(fileDoc._id);
@@ -55,11 +63,12 @@ const createAnnouncement = async (req, res, next) => {
 
 
 
-    // Crete announcement
+
+    // Create announcement
     const announcement = new Announcement({
       title,
       content,
-      group_id,
+      group_id: groupId,
       created_by: req.user._id,
       attachments: attachmentIds,
       priority: priority || 'medium',
@@ -72,7 +81,7 @@ const createAnnouncement = async (req, res, next) => {
       id: announcement._id,
       title,
       content,
-      group_id,
+      group_id: announcement.group_id,
       created_by: req.user._id,
       priority: announcement.priority,
       pinned: announcement.pinned,
@@ -86,15 +95,16 @@ const createAnnouncement = async (req, res, next) => {
 
 
 
-// List announcements (admin sees all, others see their groups announcements, with pagination)
+// List announcements (admin sees all, others see their groups' announcements, with pagination)
 const listAnnouncements = async (req, res, next) => {
   try {
-    const { group_id, page = 1, limit = 10 } = req.query;
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+    const { groupId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.max(1, parseInt(limit) || 10);
 
-    if (pageNum < 1 || limitNum < 1) {
-      return res.status(400).json({ error: 'Page and limit must be positive integers' });
+    if (groupId && !ObjectId.isValid(groupId)) {
+      return res.status(400).json({ error: 'Invalid group ID' });
     }
 
     let query = {};
@@ -104,8 +114,8 @@ const listAnnouncements = async (req, res, next) => {
       const groupIds = memberships.map(m => m.group_id);
       query.group_id = { $in: groupIds };
     }
-    if (group_id) {
-      query.group_id = group_id;
+    if (groupId) {
+      query.group_id = groupId;
     }
 
     const announcements = await Announcement.find(query)
@@ -133,11 +143,14 @@ const listAnnouncements = async (req, res, next) => {
 
 
 
-
 // View single announcement (admin or group members)
 const viewAnnouncement = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid announcement ID' });
+    }
 
     const announcement = await Announcement.findById(id)
       .populate('created_by', 'name email')
@@ -147,7 +160,6 @@ const viewAnnouncement = async (req, res, next) => {
     if (!announcement) {
       return res.status(404).json({ error: 'Announcement not found' });
     }
-
 
 
     // Check if user is a group member or admin
@@ -166,11 +178,16 @@ const viewAnnouncement = async (req, res, next) => {
 
 
 
+
 // Update announcement (admin or announcement creator)
 const updateAnnouncement = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { title, content, priority, pinned } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid announcement ID' });
+    }
 
     const announcement = await Announcement.findById(id);
     if (!announcement) {
@@ -183,13 +200,13 @@ const updateAnnouncement = async (req, res, next) => {
     }
 
 
-
-
     // Teachers can only update announcements in groups they created or are creators of
-    if (req.user.role === 'teacher' && 
-        announcement.created_by.toString() !== req.user._id.toString() &&
-        !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-        group.created_by.toString() !== req.user._id.toString()) {
+    if (
+      req.user.role === 'teacher' &&
+      announcement.created_by.toString() !== req.user._id.toString() &&
+      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
+      group.created_by.toString() !== req.user._id.toString()
+    ) {
       return res.status(403).json({ error: 'Teachers can only update announcements in groups they created or are assigned as creators' });
     }
 
@@ -219,10 +236,15 @@ const updateAnnouncement = async (req, res, next) => {
 
 
 
+
 // Delete announcement (admin or announcement creator)
 const deleteAnnouncement = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid announcement ID' });
+    }
 
     const announcement = await Announcement.findById(id);
     if (!announcement) {
@@ -235,17 +257,37 @@ const deleteAnnouncement = async (req, res, next) => {
     }
 
 
-
-    
     // Teachers can only delete announcements in groups they created or are creators of
-    if (req.user.role === 'teacher' && 
-        announcement.created_by.toString() !== req.user._id.toString() &&
-        !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-        group.created_by.toString() !== req.user._id.toString()) {
+    if (
+      req.user.role === 'teacher' &&
+      announcement.created_by.toString() !== req.user._id.toString() &&
+      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
+      group.created_by.toString() !== req.user._id.toString()
+    ) {
       return res.status(403).json({ error: 'Teachers can only delete announcements in groups they created or are assigned as creators' });
     }
 
+    const attachments = announcement.attachments;
     await Announcement.findByIdAndDelete(id);
+
+
+    
+    // Delete unreferenced files
+    for (const fileId of attachments) {
+      const references = await Promise.all([
+        Announcement.countDocuments({ attachments: fileId }),
+        DiscussionPost.countDocuments({ attachments: fileId }),
+        DiscussionReply.countDocuments({ attachments: fileId })
+      ]);
+      if (references.every(count => count === 0)) {
+        const file = await File.findById(fileId);
+        if (file && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+        await File.findByIdAndDelete(fileId);
+      }
+    }
+
     res.json({ message: 'Announcement deleted successfully' });
   } catch (error) {
     next(error);

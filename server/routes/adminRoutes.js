@@ -9,9 +9,6 @@ const adminController = require('../controllers/adminController');
 // Get all users (admin or teacher)
 router.get('/users', authMiddleware, restrictTo('admin', 'teacher'), adminController.getAllUsers);
 
-// Create user (admin or teacher)
-router.post('/users', authMiddleware, restrictTo('admin', 'teacher'), adminController.createUser);
-
 // Approve pending student registration (adminand teacher)
 router.patch('/users/:id/approve', authMiddleware, restrictTo('admin','teacher'), adminController.approveUser);
 

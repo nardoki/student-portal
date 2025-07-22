@@ -11,6 +11,10 @@ router.post('/',
   upload.array('files', 5), 
   fileController.uploadFile
 );
+//list files
+
+router.get('/group/:groupId', authMiddleware, fileController.listFiles);
+
 
 // Download file (admin or group member)
 router.get('/:fileId', 

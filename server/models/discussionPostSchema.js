@@ -2,42 +2,35 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const discussionPostSchema = new Schema({
-  title: {
-    type: String,
-    trim: true,
-    maxlength: 255,
-    default: null
-  },
   content: {
     type: String,
-    required: true
-  },
-  posted_by: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    required: true,
+    trim: true,
+    minlength: 1,
+    maxlength: 1000
   },
   group_id: {
     type: Schema.Types.ObjectId,
     ref: 'Group',
     required: true
   },
+  created_by: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   attachments: [{
     type: Schema.Types.ObjectId,
-    ref: 'File'
+    ref: 'File',
+    default: []
   }],
-  posted_at: {
+  created_at: {
     type: Date,
     default: Date.now
-  },
-  edited_at: {
-    type: Date,
-    default: null
   }
-}, {
-  timestamps: false
 });
 
-discussionPostSchema.index({ group_id: 1, posted_at: -1 });
+
+discussionPostSchema.index({ group_id: 1, created_at: -1 });
 
 module.exports = mongoose.model('DiscussionPost', discussionPostSchema);

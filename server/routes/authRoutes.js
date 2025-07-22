@@ -7,7 +7,7 @@ const authController = require('../controllers/authController');
 router.post('/register', authController.registerStudent);
 
 // Admin/teacher user creation (protected)
-router.post('/create-user', authMiddleware, restrictTo('admin', 'teacher'), authController.createUser);
+router.post('/users', authMiddleware, restrictTo('admin', 'teacher'), authController.createUser);
 
 // Login (public)
 router.post('/login', authController.login);

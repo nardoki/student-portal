@@ -153,7 +153,7 @@ const validateDeactivateUser = (req, res, next) => {
   next();
 };
 
-// --- HELPER FUNCTION ---
+// 
 function validateRequest(schema, req, res, next) {
   const { error } = schema.validate(req.body, { abortEarly: false });
   if (error) {

@@ -2,36 +2,45 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const discussionReplySchema = new Schema({
-  post_id: {
+  content: {
+    type: String,
+    required: true,
+    trim: true,
+    minlength: 1,
+    maxlength: 1000
+  },
+  group_id: {
     type: Schema.Types.ObjectId,
-    ref: 'DiscussionPost',
+    ref: 'Group',
     required: true
   },
-  replied_by: {
+  created_by: {
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  content: {
+  parent_type: {
     type: String,
-    required: true
+    required: true,
+    enum: ['DiscussionPost', 'Announcement']
+  },
+  parent_id: {
+    type: Schema.Types.ObjectId,
+    required: true,
+    refPath: 'parent_type'
   },
   attachments: [{
     type: Schema.Types.ObjectId,
-    ref: 'File'
+    ref: 'File',
+    default: []
   }],
-  replied_at: {
+  created_at: {
     type: Date,
     default: Date.now
-  },
-  edited_at: {
-    type: Date,
-    default: null
   }
-}, {
-  timestamps: false
 });
 
-discussionReplySchema.index({ post_id: 1, replied_at: -1 });
+
+discussionReplySchema.index({ group_id: 1, parent_id: 1, created_at: -1 });
 
 module.exports = mongoose.model('DiscussionReply', discussionReplySchema);

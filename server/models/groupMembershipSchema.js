@@ -9,7 +9,7 @@ const groupMembershipSchema = new Schema({
   },
   group_id: {
     type: Schema.Types.ObjectId,
-    ref: 'User',
+    ref: 'Group',
     required: true
   },
   role_in_group: {

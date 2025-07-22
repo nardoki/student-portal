@@ -17,10 +17,10 @@ const userSchema = new Schema({
     lowercase: true,
     match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
   },
-  password_hash: {  // Changed from 'password' to 'password_hash' for consistency
+  password_hash: {  
     type: String,
     required: true,
-    select: false  // Important: Excludes this field by default from queries
+    select: false  
   },
   role: {
     type: String,
@@ -42,7 +42,7 @@ const userSchema = new Schema({
     ref: 'User',
     default: null
   },
-  createdAt: {  // Changed from created_at to createdAt for consistency
+  createdAt: {  
     type: Date,
     default: Date.now
   }

@@ -18,83 +18,20 @@ const getAllUsers = async (req, res, next) => {
 
 
 
-
-// Create user (admin or teacher)
-const createUser = async (req, res, next) => {
-  try {
-    const { name, email, password, role } = req.body;
-    const creator = req.user;
-
-    // Validate input
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ error: 'Name, email, password, and role are required' });
-    }
-    if (!['student', 'teacher', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Role must be student, teacher, or admin' });
-    }
-
-
-
-
-    // Prevent creating admins unless creator is an admin
-    if (role === 'admin' && creator.role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can create other admins' });
-    }
-
-
-
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-
-
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
-
-
-
-    // Create user
-    const user = new User({
-      name,
-      email,
-      password_hash,
-      role,
-      status: 'active',
-      approvalStatus: 'approved', // Auto-approved for admin/teacher cretae
-
-      createdBy: creator._id
-    });
-
-    await user.save();
-
-    res.status(201).json({
-      id: user._id,
-      name,
-      email,
-      role,
-      status: user.status,
-      approvalStatus: user.approvalStatus
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-
-
-
-
 // Approve pending student registration 
 const approveUser = async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const user = await User.findById(userId);
+    
+    // Use findByIdAndUpdate with runValidators: false 
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { approvalStatus: 'approved' },
+      { 
+        new: true,
+        runValidators: false 
+      }
+    );
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -104,14 +41,12 @@ const approveUser = async (req, res, next) => {
       return res.status(400).json({ error: 'User is not pending approval' });
     }
 
-    user.approvalStatus = 'approved';
-    await user.save();
-
     res.json({ message: 'User approved successfully', userId });
   } catch (error) {
     next(error);
   }
 };
+
 
 
 
@@ -125,26 +60,31 @@ const updateUserStatus = async (req, res, next) => {
       return res.status(400).json({ error: 'Status must be active or inactive' });
     }
 
-    const user = await User.findById(userId);
+    // Use findByIdAndUpdate with    runValidators: fals
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { status },
+      {
+        new: true,
+        runValidators: false
+      }
+    );
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-
 
     // Teachers cannot deactivate admins
     if (req.user.role === 'teacher' && user.role === 'admin') {
       return res.status(403).json({ error: 'Teachers cannot modify admin status' });
     }
 
-    user.status = status;
-    await user.save();
-
     res.json({ id: user._id, status: user.status });
   } catch (error) {
     next(error);
   }
 };
+
 
 
 
@@ -160,6 +100,7 @@ const deleteUser = async (req, res, next) => {
 
 
 
+
     // Teachers cannot delete admins
     if (req.user.role === 'teacher' && user.role === 'admin') {
       return res.status(403).json({ error: 'Teachers cannot delete admins' });
@@ -171,6 +112,7 @@ const deleteUser = async (req, res, next) => {
     next(error);
   }
 };
+
 
 
 
@@ -226,7 +168,6 @@ const deleteGroup = async (req, res, next) => {
 
 
 
-
     // Teachers can only delete groups they created
     if (req.user.role === 'teacher' && group.created_by.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Teachers can only delete groups they created' });
@@ -244,7 +185,6 @@ const deleteGroup = async (req, res, next) => {
 
 module.exports = {
   getAllUsers,
-  createUser,
   approveUser,
   updateUserStatus,
   deleteUser,
