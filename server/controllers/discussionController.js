@@ -1,12 +1,11 @@
-
-
 const DiscussionPost = require('../models/discussionPostSchema');
 const DiscussionReply = require('../models/discussionReplySchema');
 const Announcement = require('../models/announcementSchema');
 const Group = require('../models/groupSchema');
 const GroupMembership = require('../models/groupMembershipSchema');
 const File = require('../models/fileSchema');
-
+const { ObjectId } = require('mongoose').Types;
+const { errorResponse } = require('../middleware/auth');
 
 
 // Create a discussion post (any group member)
@@ -15,20 +14,19 @@ const createPost = async (req, res, next) => {
     const { groupId } = req.params;
     const { content } = req.body;
     const files = req.files || [];
-    const { ObjectId } = require('mongoose').Types;
 
     // Validate input
     if (!content || !groupId) {
-      return res.status(400).json({ error: 'Content and group ID are required' });
+      return errorResponse(res, 400, 'Missing parameters', 'Content and group ID are required');
     }
     if (!ObjectId.isValid(groupId)) {
-      return res.status(400).json({ error: 'Invalid group ID' });
+      return errorResponse(res, 400, 'Invalid group ID');
     }
 
     // Check group membership
     const membership = await GroupMembership.findOne({ group_id: groupId, user_id: req.user._id });
     if (!membership && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied: not a group member' });
+      return errorResponse(res, 403, 'Access denied', 'Not a group member');
     }
 
     // Save file metadata
@@ -66,37 +64,34 @@ const createPost = async (req, res, next) => {
   }
 };
 
-
-
 // List posts in a group (any group member)
 const listPosts = async (req, res, next) => {
   try {
-    const { group_id, page = 1, limit = 10 } = req.query;
-
-    if (!group_id) {
-      return res.status(400).json({ error: 'Group ID is required' });
+    const { groupId, page = 1, limit = 10 } = req.params.groupId ? req.params : req.query;
+    if (!groupId || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Missing or invalid group ID');
     }
 
+    // Validate pagination parameters
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.max(1, parseInt(limit) || 10);
 
-     
     // Check group membership
-    const membership = await GroupMembership.findOne({ group_id, user_id: req.user._id });
+    const membership = await GroupMembership.findOne({ group_id: groupId, user_id: req.user._id });
     if (!membership && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied: not a group member' });
+      return errorResponse(res, 403, 'Access denied', 'Not a group member');
     }
 
-    const skip = (page - 1) * limit;
-    const posts = await DiscussionPost.find({ group_id })
-      .populate('created_by', 'name  role')
+    const skip = (pageNum - 1) * limitNum;
+    const posts = await DiscussionPost.find({ group_id: groupId })
+      .populate('created_by', 'name role')
       .populate('group_id', 'name')
       .populate('attachments', 'filename size')
       .sort({ created_at: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(limitNum);
 
-    const total = await DiscussionPost.countDocuments({ group_id });
-
-
+    const total = await DiscussionPost.countDocuments({ group_id: groupId });
 
     // Fetch reply counts for each post
     const postsWithReplyCount = await Promise.all(posts.map(async (post) => {
@@ -107,10 +102,10 @@ const listPosts = async (req, res, next) => {
     res.json({
       posts: postsWithReplyCount,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {
@@ -120,34 +115,48 @@ const listPosts = async (req, res, next) => {
 
 
 
+
 // View a single post (any group member)
 const viewPost = async (req, res, next) => {
   try {
-    const { postId } = req.params;
+    const { postId, groupId } = req.params;
+    
+    // Validate IDs
+    if (!ObjectId.isValid(postId) || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
+    }
 
-    const post = await DiscussionPost.findById(postId)
-      .populate('created_by', 'name  role')
+    // Find post with necessary population
+    const post = await DiscussionPost.findOne({
+      _id: postId,
+      group_id: groupId  // This ensures the post belongs to the specified group
+    })
+      .populate('created_by', 'name role')
       .populate('group_id', 'name')
       .populate('attachments', 'filename size');
 
     if (!post) {
-      return res.status(404).json({ error: 'Post not found' });
+      return errorResponse(res, 404, 'Not found', 'Post not found in specified group');
     }
 
-
-    // Check group membership
+    // Check group membership (admin bypass)
     if (req.user.role !== 'admin') {
-      const membership = await GroupMembership.findOne({ group_id: post.group_id, user_id: req.user._id });
+      const membership = await GroupMembership.findOne({ 
+        group_id: groupId, 
+        user_id: req.user._id 
+      });
+      
       if (!membership) {
-        return res.status(403).json({ error: 'Access denied: not a group member' });
+        return errorResponse(res, 403, 'Access denied', 'Not a group member');
       }
     }
 
-
-
     // Fetch replies
-    const replies = await DiscussionReply.find({ parent_id: postId, parent_type: 'DiscussionPost' })
-      .populate('created_by', 'name  role')
+    const replies = await DiscussionReply.find({ 
+      parent_id: postId, 
+      parent_type: 'DiscussionPost' 
+    })
+      .populate('created_by', 'name role')
       .populate('attachments', 'filename size')
       .sort({ created_at: -1 });
 
@@ -157,38 +166,32 @@ const viewPost = async (req, res, next) => {
   }
 };
 
-
-
-
 // Update a post (post creator or admin/group creator)
 const updatePost = async (req, res, next) => {
   try {
-    const { postId } = req.params;
+    const { postId, groupId } = req.params;
     const { content } = req.body;
-
+    if (!ObjectId.isValid(postId) || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
+    }
     if (!content) {
-      return res.status(400).json({ error: 'Content is required' });
+      return errorResponse(res, 400, 'Missing content', 'Content is required');
     }
 
     const post = await DiscussionPost.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: 'Post not found' });
+      return errorResponse(res, 404, 'Not found', 'Post not found');
     }
 
-
-    // Check permissions
-    const group = await Group.findById(post.group_id);
-    const isGroupCreator = group.created_by.toString() === req.user._id.toString() ||
-      group.creators.some(creator => creator.toString() === req.user._id.toString());
-    if (req.user.role !== 'admin' && post.created_by.toString() !== req.user._id.toString() && !isGroupCreator) {
-      return res.status(403).json({ error: 'Access denied: only post creator or admin/group creator can update' });
+    if (post.group_id.toString() !== groupId) {
+      return errorResponse(res, 400, 'Invalid group', 'Post does not belong to the specified group');
     }
 
     post.content = content;
     await post.save();
 
     const populatedPost = await DiscussionPost.findById(postId)
-      .populate('created_by', 'name  role')
+      .populate('created_by', 'name role')
       .populate('group_id', 'name')
       .populate('attachments', 'filename size');
 
@@ -200,31 +203,25 @@ const updatePost = async (req, res, next) => {
 
 
 
-
 // Delete a post (post creator or admin/group creator)
 const deletePost = async (req, res, next) => {
   try {
-    const { postId } = req.params;
+    const { postId, groupId } = req.params;
+    if (!ObjectId.isValid(postId) || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
+    }
 
     const post = await DiscussionPost.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: 'Post not found' });
+      return errorResponse(res, 404, 'Not found', 'Post not found');
     }
 
-
-    // Check permissions
-    const group = await Group.findById(post.group_id);
-    const isGroupCreator = group.created_by.toString() === req.user._id.toString() ||
-      group.creators.some(creator => creator.toString() === req.user._id.toString());
-    if (req.user.role !== 'admin' && post.created_by.toString() !== req.user._id.toString() && !isGroupCreator) {
-      return res.status(403).json({ error: 'Access denied: only post creator or admin/group creator can delete' });
+    if (post.group_id.toString() !== groupId) {
+      return errorResponse(res, 400, 'Invalid group', 'Post does not belong to the specified group');
     }
-
-
 
     // Delete associated replies
     await DiscussionReply.deleteMany({ parent_id: postId, parent_type: 'DiscussionPost' });
-
 
     // Delete post (files are not deleted, as they may be referenced elsewhere)
     await DiscussionPost.findByIdAndDelete(postId);
@@ -244,51 +241,93 @@ const createReply = async (req, res, next) => {
     const { groupId } = req.params;
     const { content, parent_type, parentId } = req.body;
     const files = req.files || [];
-    const { ObjectId } = require('mongoose').Types;
 
-    // Validate input
-    if (!content || !groupId || !parent_type || !parentId) {
-      return res.status(400).json({ error: 'Content, group ID, parent type, and parent ID are required' });
+    // Enhanced input validation
+    const missingParams = [];
+    if (!content) missingParams.push('content');
+    if (!parent_type) missingParams.push('parent_type');
+    if (!parentId) missingParams.push('parentId');
+    
+    if (missingParams.length > 0) {
+      return errorResponse(
+        res, 
+        400, 
+        'Missing parameters', 
+        `Required: ${missingParams.join(', ')}`
+      );
     }
+
     if (!['DiscussionPost', 'Announcement'].includes(parent_type)) {
-      return res.status(400).json({ error: 'Parent type must be DiscussionPost or Announcement' });
-    }
-    if (!ObjectId.isValid(groupId) || !ObjectId.isValid(parentId)) {
-      return res.status(400).json({ error: 'Invalid group ID or parent ID' });
+      return errorResponse(
+        res, 
+        400, 
+        'Invalid parent type', 
+        'Must be DiscussionPost or Announcement'
+      );
     }
 
-    // Check parent exists and group matches
+    // Validate IDs
+    const invalidIds = [];
+    if (!ObjectId.isValid(groupId)) invalidIds.push('groupId');
+    if (!ObjectId.isValid(parentId)) invalidIds.push('parentId');
+    if (invalidIds.length > 0) {
+      return errorResponse(
+        res, 
+        400, 
+        'Invalid ID', 
+        `Invalid: ${invalidIds.join(', ')}`
+      );
+    }
+
+    // Check parent existence and group match in single query
     const ParentModel = parent_type === 'DiscussionPost' ? DiscussionPost : Announcement;
-    const parent = await ParentModel.findById(parentId);
+    const parent = await ParentModel.findOne({
+      _id: parentId,
+      group_id: groupId
+    });
+
     if (!parent) {
-      return res.status(404).json({ error: `${parent_type} not found` });
-    }
-    if (parent.group_id.toString() !== groupId) {
-      return res.status(400).json({ error: 'Group ID does not match parent group' });
-    }
-
-    // Check group membership
-    const membership = await GroupMembership.findOne({ group_id: groupId, user_id: req.user._id });
-    if (!membership && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied: not a group member' });
+      return errorResponse(
+        res, 
+        404, 
+        'Not found', 
+        `${parent_type} not found in specified group`
+      );
     }
 
-    // Save file metadata
-    const attachmentIds = [];
-    for (const file of files) {
-      const fileDoc = new File({
-        filename: file.filename,
-        path: file.path,
-        size: file.size,
-        uploaded_by: req.user._id,
-        group_id: groupId
+    // Check group membership (admin bypass)
+    if (req.user.role !== 'admin') {
+      const membership = await GroupMembership.findOne({ 
+        group_id: groupId, 
+        user_id: req.user._id 
       });
-      await fileDoc.save();
-      attachmentIds.push(fileDoc._id);
+      if (!membership) {
+        return errorResponse(
+          res, 
+          403, 
+          'Access denied', 
+          'Not a group member'
+        );
+      }
     }
 
-    // Create reply
-    const reply = new DiscussionReply({
+    // Process file uploads
+    const attachmentIds = await Promise.all(
+      files.map(async (file) => {
+        const fileDoc = new File({
+          filename: file.filename,
+          path: file.path,
+          size: file.size,
+          uploaded_by: req.user._id,
+          group_id: groupId
+        });
+        await fileDoc.save();
+        return fileDoc._id;
+      })
+    );
+
+    // Create and save reply
+    const reply = await DiscussionReply.create({
       content,
       group_id: groupId,
       created_by: req.user._id,
@@ -296,13 +335,18 @@ const createReply = async (req, res, next) => {
       parent_id: parentId,
       attachments: attachmentIds
     });
-    await reply.save();
 
+    // Populate and return response
     const populatedReply = await DiscussionReply.findById(reply._id)
       .populate('created_by', 'name role')
       .populate('attachments', 'filename size');
 
-    res.status(201).json({ message: 'Reply created successfully', reply: populatedReply });
+    res.status(201).json({
+      success: true,
+      message: 'Reply created successfully',
+      data: populatedReply
+    });
+
   } catch (error) {
     next(error);
   }
@@ -311,38 +355,61 @@ const createReply = async (req, res, next) => {
 
 
 
-// Update a reply (reply creator or admin/group creator)
+
+// Update a reply (reply creator, group creator, or admin)
 const updateReply = async (req, res, next) => {
   try {
-    const { postId, replyId } = req.params;
+    const { replyId, groupId } = req.params; // postId is unused (can remove if not needed)
     const { content } = req.body;
 
+    // Validate input
     if (!content) {
-      return res.status(400).json({ error: 'Content is required' });
+      return errorResponse(res, 400, 'Missing content', 'Content is required');
+    }
+    if (!ObjectId.isValid(replyId) || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid reply ID or group ID');
     }
 
-    const reply = await DiscussionReply.findById(replyId);
+    // Find reply and validate group ownership in a single query
+    const reply = await DiscussionReply.findOne({
+      _id: replyId,
+      group_id: groupId // Ensures reply belongs to the specified group
+    });
+
     if (!reply) {
-      return res.status(404).json({ error: 'Reply not found' });
+      return errorResponse(res, 404, 'Not found', 'Reply not found in this group');
     }
 
+    // Check permissions (creator, group creator, or admin)
+    const isCreator = reply.created_by.equals(req.user._id);
+    const isAdmin = req.user.role === 'admin';
+    let isGroupCreator = false;
 
-    // Check group permissions
-    const group = await Group.findById(reply.group_id);
-    const isGroupCreator = group.created_by.toString() === req.user._id.toString() ||
-      group.creators.some(creator => creator.toString() === req.user._id.toString());
-    if (req.user.role !== 'admin' && reply.created_by.toString() !== req.user._id.toString() && !isGroupCreator) {
-      return res.status(403).json({ error: 'Access denied: only reply creator or admin/group creator can update' });
+    if (!isCreator && !isAdmin) {
+      const group = await Group.findById(groupId);
+      isGroupCreator = group?.created_by.equals(req.user._id) || 
+                      group?.creators?.some(c => c.equals(req.user._id));
     }
 
+    if (!isCreator && !isAdmin && !isGroupCreator) {
+      return errorResponse(res, 403, 'Access denied', 'Not authorized to update this reply');
+    }
+
+    // Update reply
     reply.content = content;
     await reply.save();
 
-    const populatedReply = await DiscussionReply.findById(replyId)
-      .populate('created_by', 'name  role')
+    // Populate and return
+    const populatedReply = await DiscussionReply.findById(reply._id)
+      .populate('created_by', 'name role')
       .populate('attachments', 'filename size');
 
-    res.json({ message: 'Reply updated successfully', reply: populatedReply });
+    res.json({ 
+      success: true,
+      message: 'Reply updated successfully',
+      data: populatedReply 
+    });
+
   } catch (error) {
     next(error);
   }
@@ -351,29 +418,47 @@ const updateReply = async (req, res, next) => {
 
 
 
-// Delete a reply (reply creator or admin/group creator)
+// Delete a reply (reply creator, group creator, or admin)
 const deleteReply = async (req, res, next) => {
   try {
-    const { postId, replyId } = req.params;
+    const { replyId, groupId } = req.params; 
 
-    const reply = await DiscussionReply.findById(replyId);
+    // Validate IDs
+    if (!ObjectId.isValid(replyId) || !ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid reply ID or group ID');
+    }
+
+    // Find reply and verify group in a single query
+    const reply = await DiscussionReply.findOneAndDelete({
+      _id: replyId,
+      group_id: groupId
+    });
+
     if (!reply) {
-      return res.status(404).json({ error: 'Reply not found' });
+      return errorResponse(res, 404, 'Not found', 'Reply not found in specified group');
     }
 
+    // Check permissions (creator, group creator, or admin)
+    const isCreator = reply.created_by.equals(req.user._id);
+    const isAdmin = req.user.role === 'admin';
+    let isGroupCreator = false;
 
-    
-    // Check group permissions
-    const group = await Group.findById(reply.group_id);
-    const isGroupCreator = group.created_by.toString() === req.user._id.toString() ||
-      group.creators.some(creator => creator.toString() === req.user._id.toString());
-    if (req.user.role !== 'admin' && reply.created_by.toString() !== req.user._id.toString() && !isGroupCreator) {
-      return res.status(403).json({ error: 'Access denied: only reply creator or admin/group creator can delete' });
+    if (!isCreator && !isAdmin) {
+      const group = await Group.findById(groupId);
+      isGroupCreator = group?.created_by.equals(req.user._id) || 
+                      group?.creators?.some(c => c.equals(req.user._id));
     }
 
-    await DiscussionReply.findByIdAndDelete(replyId);
+    if (!isCreator && !isAdmin && !isGroupCreator) {
+      return errorResponse(res, 403, 'Access denied', 'Not authorized to delete this reply');
+    }
 
-    res.json({ message: 'Reply deleted successfully' });
+    res.json({ 
+      success: true,
+      message: 'Reply deleted successfully',
+      data: { deletedReplyId: replyId }
+    });
+
   } catch (error) {
     next(error);
   }

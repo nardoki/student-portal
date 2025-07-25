@@ -2,17 +2,13 @@ const File = require('../models/fileSchema');
 const Group = require('../models/groupSchema');
 const GroupMembership = require('../models/groupMembershipSchema');
 const path = require('path');
-const fs = require('fs');
-
-
-
+const fs = require('fs').promises; // Changed to use promises API
 
 // Upload file to a group (admin or group creator)
 const uploadFile = async (req, res, next) => {
   try {
     const { group_id } = req.body;
     const files = req.files || [];
-
 
     // Validate input
     if (!group_id) {
@@ -27,15 +23,12 @@ const uploadFile = async (req, res, next) => {
       return res.status(404).json({ error: 'Group not found' });
     }
 
-
-
     // Teachers can only upload to groups they created or are creators of
     if (req.user.role === 'teacher' && 
         !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
         group.created_by.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Teachers can only upload files to groups they created or are assigned as creators' });
     }
-
 
     // Save file metadata
     const savedFiles = [];
@@ -63,9 +56,6 @@ const uploadFile = async (req, res, next) => {
     next(error);
   }
 };
-
-
-
 
 // list files
 const listFiles = async (req, res, next) => {
@@ -108,9 +98,6 @@ const listFiles = async (req, res, next) => {
   }
 };
 
-
-
-
 // Download file (admin or group member)
 const downloadFile = async (req, res, next) => {
   try {
@@ -121,7 +108,6 @@ const downloadFile = async (req, res, next) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-
     // Check if user is a group member or admin
     if (req.user.role !== 'admin') {
       const membership = await GroupMembership.findOne({ group_id: file.group_id, user_id: req.user._id });
@@ -131,17 +117,16 @@ const downloadFile = async (req, res, next) => {
     }
 
     const filePath = path.resolve(file.path);
-    if (!fs.existsSync(filePath)) {
+    try {
+      await fs.access(filePath); // Check if file exists using promises
+      res.download(filePath, file.filename);
+    } catch (err) {
       return res.status(404).json({ error: 'File not found on server' });
     }
-
-    res.download(filePath, file.filename);
   } catch (error) {
     next(error);
   }
 };
-
-
 
 // Delete file (admin or file uploader)
 const deleteFile = async (req, res, next) => {
@@ -153,19 +138,20 @@ const deleteFile = async (req, res, next) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-
     // Teachers can only delete files they uploaded
     if (req.user.role === 'teacher' && file.uploaded_by.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: 'Teachers can only delete files they uploaded' });
     }
 
-
     // Delete file from disk
     const filePath = path.resolve(file.path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    try {
+      await fs.access(filePath); // Check if file exists
+      await fs.unlink(filePath); // Changed to async unlink
+    } catch (err) {
+      // File doesn't exist or couldn't be accessed, but we'll still delete the record
+      console.warn('File not found on disk during deletion:', filePath);
     }
-
     
     // Delete file metadata
     await File.findByIdAndDelete(fileId);

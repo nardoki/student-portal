@@ -1,4 +1,5 @@
 const winston = require('winston');
+const multer = require('multer');
 
 // Configure Winston logger
 const logger = winston.createLogger({
@@ -15,7 +16,6 @@ const logger = winston.createLogger({
 
 // Error handling middleware
 const errorMiddleware = (err, req, res, next) => {
-  
   // Log the error
   logger.error({
     message: err.message,
@@ -42,6 +42,13 @@ const errorMiddleware = (err, req, res, next) => {
 
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ 
+      error: 'File upload error',
+      message: err.message 
+    });
   }
 
   // Generic error response

@@ -3,7 +3,13 @@ const GroupMembership = require('../models/groupMembershipSchema');
 const User = require('../models/userSchema');
 const { ObjectId } = require('mongoose').Types;
 
-
+// Helper function for consistent error responses
+const errorResponse = (res, status, error, message = null) => {
+  return res.status(status).json({ 
+    error,
+    ...(message && { message }) 
+  });
+};
 
 // Update group details (admin or group creator)
 const updateGroup = async (req, res, next) => {
@@ -11,88 +17,80 @@ const updateGroup = async (req, res, next) => {
     const { groupId } = req.params;
     const { name, description } = req.body;
 
-    // Validate ObjectId
     if (!ObjectId.isValid(groupId)) {
-      return res.status(400).json({ error: 'Invalid group ID' });
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid group ID format');
     }
 
     const group = await Group.findById(groupId);
     if (!group) {
-      return res.status(404).json({ error: 'Group not found' });
+      return errorResponse(res, 404, 'Not found', 'Group not found');
     }
 
-
-    // Teachers can only update groups they created or are creators of
-    if (
-      req.user.role === 'teacher' &&
-      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-      group.created_by.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ error: 'Teachers can only update groups they created or are assigned as creators' });
+    // Check permissions
+    const isCreator = group.creators.some(c => c.equals(req.user._id));
+    if (req.user.role === 'teacher' && !isCreator && !group.created_by.equals(req.user._id)) {
+      return errorResponse(res, 403, 'Permission denied', 'Teachers can only update groups they created');
     }
 
+    // Update fields
     if (name) group.name = name;
     if (description !== undefined) group.description = description;
     await group.save();
 
-    res.json({ id: group._id, name: group.name, description: group.description, created_by: group.created_by });
+    res.json({ 
+      id: group._id, 
+      name: group.name, 
+      description: group.description,
+      message: 'Group updated successfully'
+    });
   } catch (error) {
     next(error);
   }
 };
-
-
 
 // Add user to group (admin or group creator)
 const addUserToGroup = async (req, res, next) => {
   try {
     const { groupId, userId, role_in_group } = req.body;
 
-
     // Validate input
     if (!groupId || !userId || !role_in_group) {
-      return res.status(400).json({ error: 'Group ID, user ID, and role in group are required' });
+      return errorResponse(res, 400, 'Missing fields', 'All fields are required');
     }
     if (!ObjectId.isValid(groupId) || !ObjectId.isValid(userId)) {
-      return res.status(400).json({ error: 'Invalid group ID or user ID' });
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid group or user ID format');
     }
     if (!['member', 'creator'].includes(role_in_group)) {
-      return res.status(400).json({ error: 'Role in group must be member or creator' });
+      return errorResponse(res, 400, 'Invalid role', 'Role must be member or creator');
     }
 
-    const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ error: 'Group not found' });
+    const [group, user] = await Promise.all([
+      Group.findById(groupId),
+      User.findById(userId)
+    ]);
+
+    if (!group) return errorResponse(res, 404, 'Not found', 'Group not found');
+    if (!user) return errorResponse(res, 404, 'Not found', 'User not found');
+
+    // Role validation
+    if (role_in_group === 'creator' && !['teacher', 'admin'].includes(user.role)) {
+      return errorResponse(res, 400, 'Invalid role', 'Only teachers/admins can be creators');
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    // Permission check
+    const isCreator = group.creators.some(c => c.equals(req.user._id));
+    if (req.user.role === 'teacher' && !isCreator && !group.created_by.equals(req.user._id)) {
+      return errorResponse(res, 403, 'Permission denied', 'Insufficient group permissions');
     }
 
-
-    // Only admins or teachers can be creators
-    if (role_in_group === 'creator' && user.role !== 'teacher' && user.role !== 'admin') {
-      return res.status(400).json({ error: 'Only teachers or admins can be group creators' });
-    }
-
-
-    // Teachers can only add to groups they created or are creators of
-    if (
-      req.user.role === 'teacher' &&
-      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-      group.created_by.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ error: 'Teachers can only add users to groups they created or are assigned as creators' });
-    }
-
-
-    // Check if user is already a member
-    const existingMembership = await GroupMembership.findOne({ group_id: groupId, user_id: userId });
+    // Check existing membership
+    const existingMembership = await GroupMembership.findOne({ 
+      group_id: groupId, 
+      user_id: userId 
+    });
     if (existingMembership) {
-      return res.status(400).json({ error: 'User is already a member of this group' });
+      return errorResponse(res, 400, 'Duplicate entry', 'User already in group');
     }
-
 
     // Create membership
     const membership = new GroupMembership({
@@ -102,150 +100,163 @@ const addUserToGroup = async (req, res, next) => {
     });
     await membership.save();
 
-
-
-    // Update group creators array if role is creator
-    if (role_in_group === 'creator' && !group.creators.includes(userId)) {
+    // Update creators if needed
+    if (role_in_group === 'creator' && !group.creators.some(c => c.equals(userId))) {
       group.creators.push(userId);
       await group.save();
     }
 
-    res.status(201).json({ message: 'User added to group', membership });
+    res.status(201).json({ 
+      message: 'User added to group',
+      membership: {
+        id: membership._id,
+        user_id: membership.user_id,
+        group_id: membership.group_id,
+        role: membership.role_in_group
+      }
+    });
   } catch (error) {
     next(error);
   }
 };
-
 
 // Remove user from group (admin or group creator)
 const removeUserFromGroup = async (req, res, next) => {
   try {
     const { groupId, userId } = req.params;
 
-
-    // Validate ObjectId
     if (!ObjectId.isValid(groupId) || !ObjectId.isValid(userId)) {
-      return res.status(400).json({ error: 'Invalid group ID or user ID' });
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid group or user ID format');
     }
 
     const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ error: 'Group not found' });
+    if (!group) return errorResponse(res, 404, 'Not found', 'Group not found');
+
+    // Permission check
+    const isCreator = group.creators.some(c => c.equals(req.user._id));
+    if (req.user.role === 'teacher' && !isCreator && !group.created_by.equals(req.user._id)) {
+      return errorResponse(res, 403, 'Permission denied', 'Insufficient group permissions');
     }
 
-
-
-    // Teachers can only remove from groups they created or are creators of
-    if (
-      req.user.role === 'teacher' &&
-      !group.creators.some(creator => creator.toString() === req.user._id.toString()) &&
-      group.created_by.toString() !== req.user._id.toString()
-    ) {
-      return res.status(403).json({ error: 'Teachers can only remove users from groups they created or are assigned as creators' });
+    // Prevent removing primary creator
+    if (group.created_by.equals(userId)) {
+      return errorResponse(res, 400, 'Invalid operation', 'Cannot remove primary creator');
     }
 
-
-    // Prevent removing the primary creator
-    if (group.created_by.toString() === userId) {
-      return res.status(400).json({ error: 'Cannot remove the primary group creator' });
-    }
-
-    const membership = await GroupMembership.findOneAndDelete({ group_id: groupId, user_id: userId });
+    const membership = await GroupMembership.findOneAndDelete({ 
+      group_id: groupId, 
+      user_id: userId 
+    });
+    
     if (!membership) {
-      return res.status(404).json({ error: 'User is not a member of this group' });
+      return errorResponse(res, 404, 'Not found', 'Membership not found');
     }
 
-
-    // Remove from creators array if applicable
+    // Update creators if needed
     if (membership.role_in_group === 'creator') {
-      group.creators = group.creators.filter(creator => creator.toString() !== userId);
+      group.creators = group.creators.filter(c => !c.equals(userId));
       await group.save();
     }
 
-    res.json({ message: 'User removed from group' });
+    res.json({ 
+      message: 'User removed from group',
+      removed_user_id: userId,
+      group_id: groupId
+    });
   } catch (error) {
     next(error);
   }
 };
 
-
-
-
-// List user’s groups (admin sees all, others see their groups)
+// List user's groups
 const listUserGroups = async (req, res, next) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
+    const skip = (Math.max(1, page) - 1) * limit;
+    const queryLimit = Math.min(parseInt(limit), 100);
 
-    let groups;
-    let total;
+    let query, total;
     if (req.user.role === 'admin') {
-      groups = await Group.find({}).skip(skip).limit(parseInt(limit));
+      query = Group.find({}).skip(skip).limit(queryLimit);
       total = await Group.countDocuments();
     } else {
-      const memberships = await GroupMembership.find({ user_id: req.user._id })
-        .select('group_id')
+      query = GroupMembership.find({ user_id: req.user._id })
+        .populate('group_id')
         .skip(skip)
-        .limit(parseInt(limit));
-      const groupIds = memberships.map(m => m.group_id);
-      groups = await Group.find({ _id: { $in: groupIds } });
+        .limit(queryLimit);
       total = await GroupMembership.countDocuments({ user_id: req.user._id });
     }
 
-    res.json({ groups, pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) } });
+    const results = await query.exec();
+    const groups = req.user.role === 'admin' 
+      ? results 
+      : results.map(m => m.group_id);
+
+    res.json({ 
+      groups,
+      pagination: { 
+        page: parseInt(page),
+        limit: queryLimit,
+        total,
+        pages: Math.ceil(total / queryLimit) 
+      }
+    });
   } catch (error) {
     next(error);
   }
 };
 
-
-
-// List group members (admin or group members)
+// List group members
 const listGroupMembers = async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const { page = 1, limit = 10 } = req.query;
+    const queryLimit = Math.min(parseInt(limit), 100);
 
-
-    // Validate ObjectId
     if (!ObjectId.isValid(groupId)) {
-      return res.status(400).json({ error: 'Invalid group ID' });
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid group ID format');
     }
 
     const group = await Group.findById(groupId);
-    if (!group) {
-      return res.status(404).json({ error: 'Group not found' });
-    }
+    if (!group) return errorResponse(res, 404, 'Not found', 'Group not found');
 
-    
-    // Check if user is a group member or admin
+    // Permission check
     if (req.user.role !== 'admin') {
-      const membership = await GroupMembership.findOne({ group_id: groupId, user_id: req.user._id });
-      if (!membership) {
-        return res.status(403).json({ error: 'Access denied: not a group member' });
+      const isMember = await GroupMembership.exists({ 
+        group_id: groupId, 
+        user_id: req.user._id 
+      });
+      if (!isMember) {
+        return errorResponse(res, 403, 'Permission denied', 'Not a group member');
       }
     }
 
-    const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
-    const memberships = await GroupMembership.find({ group_id: groupId })
-      .populate('user_id', 'name role')
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    const total = await GroupMembership.countDocuments({ group_id: groupId });
+    const skip = (Math.max(1, page) - 1) * queryLimit;
+    const [memberships, total] = await Promise.all([
+      GroupMembership.find({ group_id: groupId })
+        .populate('user_id', 'name email role')
+        .skip(skip)
+        .limit(queryLimit),
+      GroupMembership.countDocuments({ group_id: groupId })
+    ]);
 
     const members = memberships.map(m => ({
       user_id: m.user_id._id,
       name: m.user_id.name,
+      email: m.user_id.email,
       role: m.user_id.role,
       role_in_group: m.role_in_group
     }));
 
     res.json({
       group_name: group.name,
-      members_count: members.length,
       members,
-      pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
+      pagination: { 
+        page: parseInt(page),
+        limit: queryLimit,
+        total,
+        pages: Math.ceil(total / queryLimit) 
+      }
     });
   } catch (error) {
     next(error);
