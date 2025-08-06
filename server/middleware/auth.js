@@ -4,7 +4,7 @@ const Group = require('../models/groupSchema');
 const DiscussionPost = require('../models/discussionPostSchema');
 const DiscussionReply = require('../models/discussionReplySchema');
 
-// Standard error response format
+// Standard error response 
 const errorResponse = (res, status, error, message = null) => {
   return res.status(status).json({ 
     error,

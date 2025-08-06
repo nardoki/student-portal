@@ -7,10 +7,17 @@ const fileSchema = new Schema({
     required: true,
     trim: true
   },
-  path: {
+  drive_file_id: {
     type: String,
-    required: true,
-    trim: true
+    required: true
+  },
+  webViewLink: {
+    type: String,
+    required: true
+  },
+  webContentLink: {
+    type: String,
+    required: true
   },
   size: {
     type: Number,

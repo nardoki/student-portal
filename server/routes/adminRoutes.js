@@ -6,7 +6,7 @@ const adminController = require('../controllers/adminController');
 
 
 
-// Get all users (admin or teacher)
+// Get all users 
 router.get('/users', authMiddleware, restrictTo('admin', 'teacher'), adminController.getAllUsers);
 
 // Approve pending student registration (adminand teacher)
@@ -15,10 +15,10 @@ router.patch('/users/:id/approve', authMiddleware, restrictTo('admin','teacher')
 // Update user status (admin or teacher)
 router.patch('/users/:id/status', authMiddleware, restrictTo('admin', 'teacher'), adminController.updateUserStatus);
 
-// Delete user (admin or teacher, with restrictions)
+// Delete user  with restrictions
 router.delete('/users/:id', authMiddleware, restrictTo('admin', 'teacher'), restrictDelete, adminController.deleteUser);
 
-// Create group (admin or teacher)
+// Create group 
 router.post('/groups', authMiddleware, restrictTo('admin', 'teacher'), adminController.createGroup);
 
 // Delete group (admin or primary creator)

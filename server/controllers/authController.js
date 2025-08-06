@@ -142,7 +142,7 @@ const login = async (req, res, next) => {
 
 
 
-    // Find user and explicitly include password_hash
+    // Find user and explicitly include password
     const user = await User.findOne({ email }).select('+password_hash');
     
     if (!user) {
@@ -166,7 +166,7 @@ const login = async (req, res, next) => {
 
 
 
-    // Verify password  using password_hash 
+    // Verify password  using password 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials' });

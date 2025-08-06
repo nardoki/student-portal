@@ -3,7 +3,7 @@ const GroupMembership = require('../models/groupMembershipSchema');
 const User = require('../models/userSchema');
 const { ObjectId } = require('mongoose').Types;
 
-// Helper function for consistent error responses
+//  error responses
 const errorResponse = (res, status, error, message = null) => {
   return res.status(status).json({ 
     error,
@@ -100,7 +100,7 @@ const addUserToGroup = async (req, res, next) => {
     });
     await membership.save();
 
-    // Update creators if needed
+    // Update creators 
     if (role_in_group === 'creator' && !group.creators.some(c => c.equals(userId))) {
       group.creators.push(userId);
       await group.save();
@@ -152,7 +152,7 @@ const removeUserFromGroup = async (req, res, next) => {
       return errorResponse(res, 404, 'Not found', 'Membership not found');
     }
 
-    // Update creators if needed
+    // Update creators 
     if (membership.role_in_group === 'creator') {
       group.creators = group.creators.filter(c => !c.equals(userId));
       await group.save();
@@ -167,6 +167,8 @@ const removeUserFromGroup = async (req, res, next) => {
     next(error);
   }
 };
+
+
 
 // List user's groups
 const listUserGroups = async (req, res, next) => {
@@ -205,6 +207,7 @@ const listUserGroups = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // List group members
 const listGroupMembers = async (req, res, next) => {

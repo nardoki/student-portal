@@ -5,12 +5,12 @@ const User = require('./models/userSchema');
 
 const fixAdmin = async () => {
   try {
-    // Connect to MongoDB (removed deprecated options)
+    // Connect to MongoDB 
     await mongoose.connect(process.env.MONGO_URI);
     console.log('Connected to MongoDB...');
 
     // Admin credentials
-    const adminEmail = "boby@gmail.com"; // Note: changed to lowercase
+    const adminEmail = "boby@gmail.com"; 
     const newPassword = "admin123";
     const adminData = {
       name: "Admin Boby",
@@ -57,3 +57,6 @@ const fixAdmin = async () => {
 };
 
 fixAdmin();
+
+
+

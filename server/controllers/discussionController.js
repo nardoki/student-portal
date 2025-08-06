@@ -6,6 +6,8 @@ const GroupMembership = require('../models/groupMembershipSchema');
 const File = require('../models/fileSchema');
 const { ObjectId } = require('mongoose').Types;
 const { errorResponse } = require('../middleware/auth');
+const { uploadToDrive } = require('../utils/uploadToDrive');
+
 
 
 // Create a discussion post (any group member)
@@ -29,19 +31,37 @@ const createPost = async (req, res, next) => {
       return errorResponse(res, 403, 'Access denied', 'Not a group member');
     }
 
-    // Save file metadata
+    // Save file metadata to Google Drive
     const attachmentIds = [];
     for (const file of files) {
-      const fileDoc = new File({
-        filename: file.filename,
-        path: file.path,
-        size: file.size,
-        uploaded_by: req.user._id,
-        group_id: groupId
-      });
-      await fileDoc.save();
-      attachmentIds.push(fileDoc._id);
+      try {
+
+        // Upload to Google Drive
+        const driveFile = await uploadToDrive(file);
+
+        // Save file metadata in DB
+        const fileDoc = new File({
+          filename: driveFile.filename,
+          drive_file_id: driveFile.fileId,
+          webViewLink: driveFile.webViewLink,
+          webContentLink: driveFile.webContentLink,
+          size: driveFile.size,
+          uploaded_by: req.user._id,
+          group_id: groupId
+        });
+        await fileDoc.save();
+        attachmentIds.push(fileDoc._id);
+      } catch (driveError) {
+        console.error('Error uploading file:', file.originalname, driveError);
+        return errorResponse(
+          res,
+          500,
+          'Upload failed',
+          `Failed to upload ${file.originalname} to Google Drive`
+        );
+      }
     }
+
 
     // Create post
     const post = new DiscussionPost({
@@ -56,13 +76,19 @@ const createPost = async (req, res, next) => {
     const populatedPost = await DiscussionPost.findById(post._id)
       .populate('created_by', 'name role')
       .populate('group_id', 'name')
-      .populate('attachments', 'filename size');
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      });
 
     res.status(201).json({ message: 'Post created successfully', post: populatedPost });
   } catch (error) {
     next(error);
   }
 };
+
+
 
 // List posts in a group (any group member)
 const listPosts = async (req, res, next) => {
@@ -86,7 +112,11 @@ const listPosts = async (req, res, next) => {
     const posts = await DiscussionPost.find({ group_id: groupId })
       .populate('created_by', 'name role')
       .populate('group_id', 'name')
-      .populate('attachments', 'filename size')
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      })
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -114,8 +144,6 @@ const listPosts = async (req, res, next) => {
 };
 
 
-
-
 // View a single post (any group member)
 const viewPost = async (req, res, next) => {
   try {
@@ -126,18 +154,24 @@ const viewPost = async (req, res, next) => {
       return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
     }
 
+
     // Find post with necessary population
     const post = await DiscussionPost.findOne({
       _id: postId,
-      group_id: groupId  // This ensures the post belongs to the specified group
+      group_id: groupId
     })
       .populate('created_by', 'name role')
       .populate('group_id', 'name')
-      .populate('attachments', 'filename size');
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      });
 
     if (!post) {
       return errorResponse(res, 404, 'Not found', 'Post not found in specified group');
     }
+
 
     // Check group membership (admin bypass)
     if (req.user.role !== 'admin') {
@@ -157,7 +191,11 @@ const viewPost = async (req, res, next) => {
       parent_type: 'DiscussionPost' 
     })
       .populate('created_by', 'name role')
-      .populate('attachments', 'filename size')
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      })
       .sort({ created_at: -1 });
 
     res.json({ post, replies });
@@ -165,6 +203,8 @@ const viewPost = async (req, res, next) => {
     next(error);
   }
 };
+
+
 
 // Update a post (post creator or admin/group creator)
 const updatePost = async (req, res, next) => {
@@ -223,7 +263,8 @@ const deletePost = async (req, res, next) => {
     // Delete associated replies
     await DiscussionReply.deleteMany({ parent_id: postId, parent_type: 'DiscussionPost' });
 
-    // Delete post (files are not deleted, as they may be referenced elsewhere)
+
+    // Delete post (files are not deleted, as they may be referenced otherplace)
     await DiscussionPost.findByIdAndDelete(postId);
 
     res.json({ message: 'Post deleted successfully' });
@@ -235,7 +276,7 @@ const deletePost = async (req, res, next) => {
 
 
 
-// Create a reply (any group member, to post or announcement)
+// Create a reply (any group member, to post or anouncement)
 const createReply = async (req, res, next) => {
   try {
     const { groupId } = req.params;
@@ -311,20 +352,36 @@ const createReply = async (req, res, next) => {
       }
     }
 
-    // Process file uploads
-    const attachmentIds = await Promise.all(
-      files.map(async (file) => {
+    // Process file uploads to Google Drive
+    const attachmentIds = [];
+    for (const file of files) {
+      try {
+        
+        const driveFile = await uploadToDrive(file);
+
+        // Save file metadata in DB
         const fileDoc = new File({
-          filename: file.filename,
-          path: file.path,
-          size: file.size,
+          filename: driveFile.filename,
+          drive_file_id: driveFile.fileId,
+          webViewLink: driveFile.webViewLink,
+          webContentLink: driveFile.webContentLink,
+          size: driveFile.size,
           uploaded_by: req.user._id,
           group_id: groupId
         });
         await fileDoc.save();
-        return fileDoc._id;
-      })
-    );
+        attachmentIds.push(fileDoc._id);
+      } catch (driveError) {
+        console.error('Error uploading file:', file.originalname, driveError);
+        return errorResponse(
+          res,
+          500,
+          'Upload failed',
+          `Failed to upload ${file.originalname} to Google Drive`
+        );
+      }
+    }
+
 
     // Create and save reply
     const reply = await DiscussionReply.create({
@@ -336,10 +393,15 @@ const createReply = async (req, res, next) => {
       attachments: attachmentIds
     });
 
+
     // Populate and return response
     const populatedReply = await DiscussionReply.findById(reply._id)
       .populate('created_by', 'name role')
-      .populate('attachments', 'filename size');
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      });
 
     res.status(201).json({
       success: true,
@@ -355,11 +417,10 @@ const createReply = async (req, res, next) => {
 
 
 
-
 // Update a reply (reply creator, group creator, or admin)
 const updateReply = async (req, res, next) => {
   try {
-    const { replyId, groupId } = req.params; // postId is unused (can remove if not needed)
+    const { replyId, groupId } = req.params; 
     const { content } = req.body;
 
     // Validate input
@@ -373,7 +434,7 @@ const updateReply = async (req, res, next) => {
     // Find reply and validate group ownership in a single query
     const reply = await DiscussionReply.findOne({
       _id: replyId,
-      group_id: groupId // Ensures reply belongs to the specified group
+      group_id: groupId 
     });
 
     if (!reply) {
@@ -474,3 +535,5 @@ module.exports = {
   updateReply,
   deleteReply
 };
+
+
