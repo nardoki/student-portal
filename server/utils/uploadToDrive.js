@@ -1,19 +1,11 @@
-
-
 const { googleDriveClient } = require('../middleware/googleAuth');
 const stream = require('stream');
 
-/**
- * Uploads a file to Google Drive
- * @param {Object} file - File object with buffer, originalname, mimetype, size
- * @returns {Promise<Object>} - Object containing file metadata and links
- */
 const uploadToDrive = async (file) => {
   if (!file.buffer || !Buffer.isBuffer(file.buffer)) {
     throw new Error('Invalid file buffer');
   }
 
-  // Upload to Google Drive
   const driveResponse = await googleDriveClient.files.create({
     requestBody: {
       name: file.originalname,
@@ -28,7 +20,6 @@ const uploadToDrive = async (file) => {
 
   const fileId = driveResponse.data.id;
 
-  // Set public read permission
   await googleDriveClient.permissions.create({
     fileId,
     requestBody: {
@@ -37,7 +28,6 @@ const uploadToDrive = async (file) => {
     }
   });
 
-  // Get file links
   const { data: metadata } = await googleDriveClient.files.get({
     fileId,
     fields: 'webViewLink, webContentLink'
@@ -53,10 +43,6 @@ const uploadToDrive = async (file) => {
   };
 };
 
-/**
- * Deletes a file from Google Drive
- * @param {string} fileId - Google Drive file ID
- */
 const deleteFromDrive = async (fileId) => {
   await googleDriveClient.files.delete({ fileId });
 };
