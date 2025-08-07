@@ -28,6 +28,8 @@ const uploadToDrive = async (file) => {
     }
   });
 
+  await new Promise((res) => setTimeout(res, 1000));
+
   const { data: metadata } = await googleDriveClient.files.get({
     fileId,
     fields: 'webViewLink, webContentLink'

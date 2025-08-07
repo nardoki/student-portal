@@ -55,6 +55,7 @@ const uploadFile = async (req, res, next) => {
           uploaded_by: fileDoc.uploaded_by,
           group_id: fileDoc.group_id,
           webViewLink: fileDoc.webViewLink,
+          webContentLink: fileDoc.webContentLink,
           created_at: fileDoc.created_at
         });
       } catch (error) {
