@@ -12,15 +12,13 @@ const fileRoutes = require('./routes/fileRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
 const discussionRoutes = require('./routes/discussionRoutes');
-const swaggerUi = require('swagger-ui-express');
-const YAML = require('yamljs');
-const swaggerDocument = YAML.load('swagger.yaml');
+const profileRoutes = require('./routes/profileRoutes');
+
 
 dotenv.config();
 const app = express();
 
-// API Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 
 // Middleware
 app.use(helmet());
@@ -44,13 +42,14 @@ app.use('/api/files', fileRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/discussions', discussionRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to the Ethronics Student Portal API' });
 });
 
-// 404 Handler (must be after all routes but before error middleware)
+// 404 Handler 
 app.use((req, res, next) => {
   res.status(404).json({ 
     error: 'Route not found',
@@ -58,7 +57,7 @@ app.use((req, res, next) => {
   });
 });
 
-// Global Error Handler (must be last middleware)
+// Global Error Handler 
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

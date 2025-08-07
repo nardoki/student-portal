@@ -206,11 +206,14 @@ const viewPost = async (req, res, next) => {
 
 
 
+
 // Update a post (post creator or admin/group creator)
 const updatePost = async (req, res, next) => {
   try {
     const { postId, groupId } = req.params;
     const { content } = req.body;
+
+    // Validate input
     if (!ObjectId.isValid(postId) || !ObjectId.isValid(groupId)) {
       return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
     }
@@ -218,61 +221,106 @@ const updatePost = async (req, res, next) => {
       return errorResponse(res, 400, 'Missing content', 'Content is required');
     }
 
-    const post = await DiscussionPost.findById(postId);
+    // Find post and verify group
+    const post = await DiscussionPost.findOne({
+      _id: postId,
+      group_id: groupId
+    });
     if (!post) {
-      return errorResponse(res, 404, 'Not found', 'Post not found');
+      return errorResponse(res, 404, 'Not found', 'Post not found in specified group');
     }
 
-    if (post.group_id.toString() !== groupId) {
-      return errorResponse(res, 400, 'Invalid group', 'Post does not belong to the specified group');
+    // Check permissions (creator, group creator, or admin)
+    const isCreator = post.created_by.equals(req.user._id);
+    const isAdmin = req.user.role === 'admin';
+    let isGroupCreator = false;
+
+    if (!isCreator && !isAdmin) {
+      const group = await Group.findById(groupId);
+      isGroupCreator = group?.created_by.equals(req.user._id) || 
+                      group?.creators?.some(c => c.equals(req.user._id));
     }
 
+    if (!isCreator && !isAdmin && !isGroupCreator) {
+      return errorResponse(res, 403, 'Access denied', 'Not authorized to update this post');
+    }
+
+    // Update post
     post.content = content;
     await post.save();
 
-    const populatedPost = await DiscussionPost.findById(postId)
+    // Populate and return
+    const populatedPost = await DiscussionPost.findById(post._id)
       .populate('created_by', 'name role')
       .populate('group_id', 'name')
-      .populate('attachments', 'filename size');
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      });
 
-    res.json({ message: 'Post updated successfully', post: populatedPost });
+    res.json({ 
+      success: true,
+      message: 'Post updated successfully',
+      data: populatedPost 
+    });
   } catch (error) {
     next(error);
   }
 };
 
-
-
-// Delete a post (post creator or admin/group creator)
+// Delete a post post creator or admin/group creator
 const deletePost = async (req, res, next) => {
   try {
     const { postId, groupId } = req.params;
+
+    // Validate IDs
     if (!ObjectId.isValid(postId) || !ObjectId.isValid(groupId)) {
       return errorResponse(res, 400, 'Invalid ID', 'Invalid post ID or group ID');
     }
 
-    const post = await DiscussionPost.findById(postId);
+    // Find post and verify group
+    const post = await DiscussionPost.findOne({
+      _id: postId,
+      group_id: groupId
+    });
     if (!post) {
-      return errorResponse(res, 404, 'Not found', 'Post not found');
+      return errorResponse(res, 404, 'Not found', 'Post not found in specified group');
     }
 
-    if (post.group_id.toString() !== groupId) {
-      return errorResponse(res, 400, 'Invalid group', 'Post does not belong to the specified group');
+    // Check permissions (creator, group creator, or admin)
+    const isCreator = post.created_by.equals(req.user._id);
+    const isAdmin = req.user.role === 'admin';
+    let isGroupCreator = false;
+
+    if (!isCreator && !isAdmin) {
+      const group = await Group.findById(groupId);
+      isGroupCreator = group?.created_by.equals(req.user._id) || 
+                      group?.creators?.some(c => c.equals(req.user._id));
+    }
+
+    if (!isCreator && !isAdmin && !isGroupCreator) {
+      return errorResponse(res, 403, 'Access denied', 'Not authorized to delete this post');
     }
 
     // Delete associated replies
-    await DiscussionReply.deleteMany({ parent_id: postId, parent_type: 'DiscussionPost' });
+    await DiscussionReply.deleteMany({ 
+      parent_id: postId, 
+      parent_type: 'DiscussionPost' 
+    });
 
-
-    // Delete post (files are not deleted, as they may be referenced otherplace)
+    // Delete post
     await DiscussionPost.findByIdAndDelete(postId);
 
-    res.json({ message: 'Post deleted successfully' });
+    res.json({ 
+      success: true,
+      message: 'Post deleted successfully',
+      data: { deletedPostId: postId }
+    });
   } catch (error) {
     next(error);
   }
 };
-
 
 
 

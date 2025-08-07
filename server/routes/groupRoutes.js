@@ -10,10 +10,8 @@ router.patch('/:groupId', authMiddleware, restrictTo('admin', 'teacher'), groupC
 // Add user to group 
 router.post('/add-member', authMiddleware, restrictTo('admin', 'teacher'), groupController.addUserToGroup);
 
-
 // Remove user from group 
 router.delete('/:groupId/members/:userId', authMiddleware, restrictTo('admin', 'teacher'), groupController.removeUserFromGroup);
-
 
 
 // List user's groups  admin sees all, others see their groups
