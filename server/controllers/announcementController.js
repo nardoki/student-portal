@@ -97,7 +97,7 @@ const createAnnouncement = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
@@ -137,7 +137,7 @@ const listAnnouncements = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       })
       .sort({ pinned: -1, created_at: -1 })
@@ -176,7 +176,7 @@ const viewAnnouncement = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
@@ -256,7 +256,7 @@ const updateAnnouncement = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 

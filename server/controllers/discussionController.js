@@ -78,7 +78,7 @@ const createPost = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
@@ -114,7 +114,7 @@ const listPosts = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       })
       .sort({ created_at: -1 })
@@ -164,7 +164,7 @@ const viewPost = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
@@ -193,7 +193,7 @@ const viewPost = async (req, res, next) => {
       .populate('created_by', 'name role')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       })
       .sort({ created_at: -1 });
@@ -255,7 +255,7 @@ const updatePost = async (req, res, next) => {
       .populate('group_id', 'name')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
@@ -447,7 +447,7 @@ const createReply = async (req, res, next) => {
       .populate('created_by', 'name role')
       .populate({
         path: 'attachments',
-        select: 'filename size webViewLink',
+        select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       });
 
