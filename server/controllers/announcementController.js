@@ -107,7 +107,7 @@ const createAnnouncement = async (req, res, next) => {
   }
 };
 
-// List announcements admin sees all, others see their groups announcements, with pagination)
+// List announcements - admin sees all, others see only their group announcements (with pagination)
 const listAnnouncements = async (req, res, next) => {
   try {
     const { groupId } = req.params;
@@ -120,14 +120,15 @@ const listAnnouncements = async (req, res, next) => {
     }
 
     let query = {};
-    if (req.user.role !== 'admin') {
 
-  
-      // Non-admins other useronly see announcements in their groups
+    // Non-admins: only see announcements in their groups
+    if (req.user.role !== 'admin') {
       const memberships = await GroupMembership.find({ user_id: req.user._id }).select('group_id');
       const groupIds = memberships.map(m => m.group_id);
       query.group_id = { $in: groupIds };
     }
+
+    // If groupId param provided, narrow down to that group
     if (groupId) {
       query.group_id = groupId;
     }
@@ -139,6 +140,17 @@ const listAnnouncements = async (req, res, next) => {
         path: 'attachments',
         select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
+      })
+      .populate({
+        path: 'replies', // populate replies directly
+        populate: [
+          { path: 'created_by', select: 'name email' },
+          {
+            path: 'attachments',
+            select: 'filename size webViewLink webContentLink',
+            match: { drive_file_id: { $exists: true } }
+          }
+        ]
       })
       .sort({ pinned: -1, created_at: -1 })
       .skip((pageNum - 1) * limitNum)
@@ -159,6 +171,7 @@ const listAnnouncements = async (req, res, next) => {
     next(error);
   }
 };
+
 
 
 
