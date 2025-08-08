@@ -141,25 +141,33 @@ const listAnnouncements = async (req, res, next) => {
         select: 'filename size webViewLink webContentLink',
         match: { drive_file_id: { $exists: true } }
       })
-      .populate({
-        path: 'replies', // populate replies directly
-        populate: [
-          { path: 'created_by', select: 'name email' },
-          {
-            path: 'attachments',
-            select: 'filename size webViewLink webContentLink',
-            match: { drive_file_id: { $exists: true } }
-          }
-        ]
-      })
       .sort({ pinned: -1, created_at: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum);
 
+    // Fetch replies for each announcement
+    const announcementsWithReplies = await Promise.all(
+      announcements.map(async ann => {
+        const replies = await DiscussionReply.find({
+          parent_type: 'Announcement',
+          parent_id: ann._id
+        })
+          .populate('created_by', 'name email')
+          .populate({
+            path: 'attachments',
+            select: 'filename size webViewLink webContentLink',
+            match: { drive_file_id: { $exists: true } }
+          })
+          .sort({ created_at: 1 }); // oldest first
+
+        return { ...ann.toObject(), replies };
+      })
+    );
+
     const total = await Announcement.countDocuments(query);
 
     res.json({
-      announcements,
+      announcements: announcementsWithReplies,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -171,8 +179,6 @@ const listAnnouncements = async (req, res, next) => {
     next(error);
   }
 };
-
-
 
 
 // View single announcement (admin or group members)
