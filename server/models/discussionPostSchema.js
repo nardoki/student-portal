@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+
 const discussionPostSchema = new Schema({
   content: {
     type: String,
