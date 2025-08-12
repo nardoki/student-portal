@@ -13,12 +13,16 @@ router.post('/add-member', authMiddleware, restrictTo('admin', 'teacher'), group
 // Remove user from group 
 router.delete('/:groupId/members/:userId', authMiddleware, restrictTo('admin', 'teacher'), groupController.removeUserFromGroup);
 
+router.get('/:groupId', authMiddleware,groupController.getGroup);
 
 // List user's groups  admin sees all, others see their groups
 router.get('/', authMiddleware, groupController.listUserGroups);
+
+
 
 
 // List group members 
 router.get('/:groupId/members', authMiddleware, groupController.listGroupMembers);
 
 module.exports = router;
+

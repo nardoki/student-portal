@@ -12,6 +12,9 @@ router.post('/users', authMiddleware, restrictTo('admin', 'teacher'), authContro
 // Login (public)
 router.post('/login', authController.login);
 
+
+
+
 // Get current user (protected)
 router.get('/me', authMiddleware, authController.getCurrentUser);
 

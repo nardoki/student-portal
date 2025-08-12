@@ -573,6 +573,62 @@ const deleteReply = async (req, res, next) => {
   }
 };
 
+// Get recent replies (admin only)
+const getRecentReplies = async (req, res, next) => {
+  try {
+    const { limit = 10 } = req.query;
+    const limitNum = Math.max(1, Math.min(50, parseInt(limit) || 10));
+
+    const recentReplies = await DiscussionReply.find()
+      .populate('created_by', 'name role')
+      .populate('group_id', 'name')
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      })
+      .sort({ created_at: -1 })
+      .limit(limitNum);
+
+    res.json({
+      success: true,
+      replies: recentReplies
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get recent posts (admin only)
+const getRecentPosts = async (req, res, next) => {
+  try {
+    const { limit = 10 } = req.query;
+    const limitNum = Math.max(1, Math.min(50, parseInt(limit) || 10));
+
+    const recentPosts = await DiscussionPost.find()
+      .populate('created_by', 'name role')
+      .populate('group_id', 'name')
+      .populate({
+        path: 'attachments',
+        select: 'filename size webViewLink',
+        match: { drive_file_id: { $exists: true } }
+      })
+      .sort({ created_at: -1 })
+      .limit(limitNum);
+
+    res.json({
+      success: true,
+      posts: recentPosts
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
 module.exports = {
   createPost,
   listPosts,
@@ -581,7 +637,10 @@ module.exports = {
   deletePost,
   createReply,
   updateReply,
-  deleteReply
+  deleteReply,
+  getRecentReplies,
+  getRecentPosts
+
 };
 
 

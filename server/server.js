@@ -20,17 +20,31 @@ const app = express();
 
 
 
+
+
 // Middleware
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(compression());
+const allowedOrigins = ["http://192.168.1.5:5174", "http://localhost:5174", "http://192.168.1.22:5173"];
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function(origin, callback){
+    if (!origin || allowedOrigins.includes(origin)){
+      callback(null, true);
+    }else{
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials:true
 }));
+
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
+
+
 
 // Database Connection
 connectDB();
@@ -43,6 +57,8 @@ app.use('/api/groups', groupRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/discussions', discussionRoutes);
 app.use('/api/profile', profileRoutes);
+
+
 
 // Basic route
 app.get('/', (req, res) => {
@@ -60,5 +76,9 @@ app.use((req, res, next) => {
 // Global Error Handler 
 app.use(errorMiddleware);
 
+
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running at http://0.0.0.0:${PORT}`);
+});

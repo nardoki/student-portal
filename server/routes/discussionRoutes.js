@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware,restrictTo } = require('../middleware/auth');
 const { upload } = require('../middleware/upload');
 const discussionController = require('../controllers/discussionController');
 
@@ -20,5 +20,19 @@ router.delete(
   authMiddleware,
   discussionController.deleteReply
 );
+
+
+
+
+
+
+// Get recent replies (admin only)
+router.get('/replies/recent', authMiddleware, restrictTo('admin'), discussionController.getRecentReplies);
+
+// Get recent posts (admin only)
+router.get('/posts/recent', authMiddleware, restrictTo('admin'), discussionController.getRecentPosts);
+
+
+
 
 module.exports = router;

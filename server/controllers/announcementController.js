@@ -10,6 +10,93 @@ const { uploadToDrive, deleteFromDrive } = require('../utils/uploadToDrive');
 
 
 
+// Get all announcements (admin only)
+const getAllAnnouncements = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10, sort = 'oldest', filter = 'all' } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.max(1, parseInt(limit) || 10);
+
+    let query = {};
+
+    // Apply filters
+    if (filter === 'pinned') {
+      query.pinned = true;
+    } else if (filter === 'high_priority') {
+      query.priority = 'high';
+    } else if (filter === 'medium_priority') {
+      query.priority = 'medium';
+    } else if (filter === 'low_priority') {
+      query.priority = 'low';
+    }
+
+    // Apply sorting: pinned first, then by creation date
+    let sortOptions = {};
+    if (sort === 'oldest') {
+      sortOptions = { pinned: -1, created_at: 1 }; // Pinned first, then oldest to newest
+    } else if (sort === 'newest') {
+      sortOptions = { pinned: -1, created_at: -1 }; // Pinned first, then newest to oldest
+    } else if (sort === 'priority') {
+      sortOptions = { pinned: -1, priority: -1, created_at: -1 }; // Pinned first, then by priority
+    } else {
+      sortOptions = { pinned: -1, created_at: 1 }; // Default: pinned first, then oldest to newest
+    }
+
+    const [announcements, total] = await Promise.all([
+      Announcement.find(query)
+        .populate('group_id', 'name')
+        .populate('created_by', 'name email')
+        .populate({
+          path: 'attachments',
+          select: 'filename size webViewLink',
+          match: { drive_file_id: { $exists: true } }
+        })
+        .sort(sortOptions)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      Announcement.countDocuments(query)
+    ]);
+
+    // Get replies for each announcement
+    const announcementsWithReplies = await Promise.all(
+      announcements.map(async (announcement) => {
+        const replies = await DiscussionReply.find({
+          parent_type: 'Announcement',
+          parent_id: announcement._id
+        })
+        .populate('created_by', 'name email')
+        .sort({ created_at: 1 }) // Oldest to latest replies
+        .select('content created_by created_at');
+
+        return {
+          ...announcement.toObject(),
+          replies: replies
+        };
+      })
+    );
+
+    res.json({
+      announcements: announcementsWithReplies,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+
+
+
+
+
+
 // Create announcement (admin or group creator)
 const createAnnouncement = async (req, res, next) => {
   try {
@@ -350,6 +437,7 @@ const deleteAnnouncement = async (req, res, next) => {
 };
 
 module.exports = {
+  getAllAnnouncements,
   createAnnouncement,
   listAnnouncements,
   viewAnnouncement,

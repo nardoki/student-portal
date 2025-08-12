@@ -62,8 +62,6 @@ const createUser = async (req, res, next) => {
     const { name, email, password, role } = req.body;
     const creator = req.user;
 
-
-
     // Validate input
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password, and role are required' });
@@ -71,9 +69,6 @@ const createUser = async (req, res, next) => {
     if (!['student', 'teacher', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'Role must be student, teacher, or admin' });
     }
-
-
-
 
     // Prevent creating admins unless creator is an admin
     if (role === 'admin' && creator.role !== 'admin') {
@@ -102,7 +97,7 @@ const createUser = async (req, res, next) => {
       password_hash,
       role,
       status: 'active',
-      approvalStatus: 'approved', // Auto-approved for admin/teacher-created userr
+      approvalStatus: 'approved', 
       createdBy: creator._id
     });
 
@@ -178,7 +173,8 @@ const login = async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
-
+    console.log("login attempted");
+    
     res.json({
       token,
       user: {

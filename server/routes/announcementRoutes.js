@@ -4,6 +4,15 @@ const { authMiddleware, restrictTo, restrictToGroupCreatorOrAdmin } = require('.
 const { upload } = require('../middleware/upload');
 const announcementController = require('../controllers/announcementController');
 
+
+
+// Get all announcements (admin and teacher)
+router.get('/', authMiddleware, restrictTo('admin', 'teacher'), announcementController.getAllAnnouncements);
+
+
+
+
+
 router.post('/:groupId/announcements', 
   authMiddleware, 
   restrictTo('admin', 'teacher'), 

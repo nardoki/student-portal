@@ -11,6 +11,55 @@ const errorResponse = (res, status, error, message = null) => {
   });
 };
 
+
+// Get a specific group (admin or group members)
+
+const getGroup = async (req, res, next) => {
+  try {
+    const { groupId } = req.params;
+
+    if (!ObjectId.isValid(groupId)) {
+      return errorResponse(res, 400, 'Invalid ID', 'Invalid group ID format');
+    }
+
+    let groupQuery = { _id: groupId };
+
+    // If not admin, check only groups where user is a member
+    if (req.user.role !== 'admin') {
+      const membership = await GroupMembership.findOne({
+        group_id: groupId,
+        user_id: req.user._id
+      });
+
+      if (!membership) {
+        return errorResponse(res, 403, 'Permission denied', 'You do not have access to this group');
+      }
+    }
+
+    const group = await Group.findOne(groupQuery).lean();
+    if (!group) {
+      return errorResponse(res, 404, 'Not found', 'Group not found');
+    }
+
+    res.json({
+      _id: group._id,
+      name: group.name,
+      description: group.description,
+      created_by: group.created_by,
+      creators: group.creators,
+      created_at: group.created_at,
+      updated_at: group.updated_at
+    });
+
+  } catch (error) {
+    console.error('Error fetching group:', error);
+    next(error);
+  }
+};
+
+
+
+
 // Update group details (admin or group creator)
 const updateGroup = async (req, res, next) => {
   try {
@@ -267,6 +316,7 @@ const listGroupMembers = async (req, res, next) => {
 };
 
 module.exports = {
+  getGroup,
   updateGroup,
   addUserToGroup,
   removeUserFromGroup,
