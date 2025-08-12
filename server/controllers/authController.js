@@ -64,8 +64,6 @@ const createUser = async (req, res, next) => {
 
 
 
-
-
     // Validate input
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password, and role are required' });
@@ -224,3 +222,4 @@ module.exports = {
   login,
   getCurrentUser
 };
+
